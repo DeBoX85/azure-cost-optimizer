@@ -428,3 +428,82 @@ def get_ai_narrative(resources: list, kpi) -> str | None:
         logger.warning("AI narrative generation failed: %s", exc)
 
     return None
+
+
+_RG_DESC_SYSTEM = (
+    "You are an Azure cloud analyst. Given a list of resource groups with their names, "
+    "resource types, and monthly spend, write a short one-line description (max 12 words) "
+    "for each that explains its business purpose. Use the resource types as clues. "
+    "Be concise and specific — e.g. 'Microsoft Sentinel SIEM and security monitoring' or "
+    "'SFTP ingestion pipeline with Azure Data Factory'. "
+    "Return ONLY a valid JSON object: {\"RG-NAME\": \"description\", ...}. No markdown, no extra text."
+)
+
+
+def generate_rg_descriptions(rg_summaries: list[dict]) -> dict[str, str]:
+    """
+    rg_summaries: list of {name, types: [str], cost: float}
+    Returns {rg_name: description_string}. Returns {} if AI not configured or on error.
+    """
+    if not rg_summaries:
+        return {}
+
+    import services.settings_service as svc
+    provider = svc.get_value("ai_provider", "none")
+    if provider == "none":
+        return {}
+
+    payload = json.dumps([
+        {"name": r["name"], "types": r["types"][:5], "monthly_cost_usd": round(r["cost"], 0)}
+        for r in rg_summaries
+    ], indent=2)
+    prompt = f"Generate descriptions for these resource groups:\n{payload}"
+
+    try:
+        raw = None
+        if provider == "claude":
+            api_key = svc.get_value("ANTHROPIC_API_KEY", "")
+            if not api_key:
+                return {}
+            import anthropic
+            client   = anthropic.Anthropic(api_key=api_key)
+            response = client.messages.create(
+                model=CLAUDE_MODEL, max_tokens=800,
+                system=_RG_DESC_SYSTEM,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            raw = response.content[0].text.strip()
+
+        elif provider == "azure_openai":
+            endpoint   = svc.get_value("AZURE_OPENAI_ENDPOINT", "")
+            api_key    = svc.get_value("AZURE_OPENAI_KEY", "")
+            deployment = svc.get_value("AZURE_OPENAI_DEPLOYMENT", "gpt-4o-mini")
+            if not endpoint or not api_key:
+                return {}
+            from openai import AzureOpenAI
+            client = AzureOpenAI(azure_endpoint=_normalise_aoai_endpoint(endpoint), api_key=api_key, api_version="2024-12-01-preview")
+            kwargs = dict(
+                model=deployment,
+                messages=[{"role": "system", "content": _RG_DESC_SYSTEM}, {"role": "user", "content": prompt}],
+                max_completion_tokens=800,
+            )
+            try:
+                response = client.chat.completions.create(**kwargs)
+            except Exception as e:
+                if "max_completion_tokens" in str(e) or "unsupported_parameter" in str(e):
+                    kwargs.pop("max_completion_tokens")
+                    kwargs["max_tokens"] = 800
+                    kwargs["temperature"] = 0.2
+                    response = client.chat.completions.create(**kwargs)
+                else:
+                    raise
+            raw = response.choices[0].message.content.strip()
+
+        if raw:
+            cleaned = raw.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
+            return json.loads(cleaned)
+
+    except Exception as exc:
+        logger.warning("RG description generation failed: %s", exc)
+
+    return {}

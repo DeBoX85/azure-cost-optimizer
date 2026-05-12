@@ -1,16 +1,19 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import clsx from 'clsx'
 import {
   ChevronUp, ChevronDown, ChevronsUpDown, Search, Brain, Lightbulb,
   ExternalLink, Terminal, Check, Clock, X as XIcon, AlertTriangle,
   MapPin, Server, Database, Cloud, Cpu, Shield, Zap, HardDrive, Filter,
   Network, SlidersHorizontal, RotateCcw, Navigation, Copy, Lock, Eye, ShieldOff,
+  StickyNote,
 } from 'lucide-react'
 import SparkLine from './SparkLine'
 import ResourceConnectionModal from './ResourceConnectionModal'
 import { SCORE_HEX, SCORE_STYLE as SCORE_STYLE_MAP } from '../scoreColors'
+import { api } from '../api/client'
 
-// ── Action tracker (localStorage) ─────────────────────────────────────────────
+// ── Action tracker (localStorage + backend sync) ───────────────────────────────
 
 const STORAGE_KEY = 'azure-optimizer-actions'
 function loadActions() {
@@ -476,6 +479,71 @@ const ALL_COLS = [
 const COLS_STORAGE_KEY  = 'azure-optimizer-columns'
 const DEFAULT_VISIBLE   = new Set(ALL_COLS.filter(c => c.defaultVisible).map(c => c.key))
 
+// ── Note popover ───────────────────────────────────────────────────────────────
+
+function NotePopover({ resourceId, initialValue, anchorRect, onSave, onClose }) {
+  const [text, setText] = useState(initialValue || '')
+  const ref = useRef(null)
+
+  useEffect(() => {
+    const onDown = (e) => { if (ref.current && !ref.current.contains(e.target)) onClose() }
+    const onKey  = (e) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown',   onKey)
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey) }
+  }, [onClose])
+
+  const top  = Math.min(anchorRect.bottom + 8, window.innerHeight - 230)
+  const left = Math.max(8, Math.min(anchorRect.left - 60, window.innerWidth - 308))
+
+  return createPortal(
+    <div ref={ref} style={{ position: 'fixed', top, left, width: 300, zIndex: 9999 }}
+         className="bg-gray-900 border border-gray-700/80 rounded-xl shadow-2xl shadow-black/60 p-4">
+      <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center gap-1.5">
+          <StickyNote size={13} className="text-amber-400" />
+          <p className="text-xs font-semibold text-gray-100">Status note</p>
+        </div>
+        <button onClick={onClose} className="text-gray-600 hover:text-gray-300 transition-colors">
+          <XIcon size={13} />
+        </button>
+      </div>
+      <p className="text-xs text-gray-500 mb-3 leading-relaxed">
+        Explain why this saving isn't being actioned. It will appear in the PDF report.
+      </p>
+      <textarea
+        value={text}
+        onChange={e => setText(e.target.value)}
+        placeholder="e.g. Fabric capacity is temporary — being deleted in Q3"
+        className="w-full bg-gray-800 border border-gray-700 rounded-lg text-xs text-gray-200 placeholder-gray-600 p-2.5 resize-none focus:outline-none focus:ring-1 focus:ring-blue-500/60 focus:border-blue-500/60 transition-all leading-relaxed"
+        rows={3}
+        autoFocus
+        maxLength={280}
+      />
+      <div className="flex items-center justify-between mt-2.5">
+        <span className="text-xs text-gray-600">{text.length} / 280</span>
+        <div className="flex items-center gap-1.5">
+          {initialValue && (
+            <button onClick={() => onSave('')}
+              className="text-xs text-red-500/80 hover:text-red-400 px-2 py-1 rounded transition-colors">
+              Remove
+            </button>
+          )}
+          <button onClick={onClose}
+            className="text-xs text-gray-500 hover:text-gray-300 px-2 py-1 rounded transition-colors">
+            Cancel
+          </button>
+          <button onClick={() => onSave(text.trim())} disabled={!text.trim()}
+            className="text-xs bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white px-3 py-1 rounded-lg font-medium transition-colors">
+            Save
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  )
+}
+
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export default function ResourceTable({ resources, externalFilter = null, onClearExternalFilter }) {
@@ -500,8 +568,40 @@ export default function ResourceTable({ resources, externalFilter = null, onClea
     return new Set(DEFAULT_VISIBLE)
   })
   const [colPickerOpen, setColPickerOpen] = useState(false)
+  const [notes,        setNotes]        = useState({})
+  const [notePopover,  setNotePopover]  = useState(null) // { resourceId, anchorRect }
   const colPickerRef = useRef(null)
   const PAGE_SIZE = 25
+
+  useEffect(() => {
+    api.getNotes().then(setNotes).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    api.getActionStatuses().then(backendStatuses => {
+      setActions(prev => {
+        const merged = { ...prev, ...backendStatuses }
+        saveActions(merged)
+        return merged
+      })
+    }).catch(() => {})
+  }, [])
+
+  function openNote(resourceId, anchor) {
+    setNotePopover({ resourceId, anchorRect: anchor.getBoundingClientRect() })
+  }
+
+  async function handleSaveNote(resourceId, text) {
+    const key = resourceId.toLowerCase()
+    await api.upsertNote(key, text).catch(() => {})
+    setNotes(prev => {
+      const next = { ...prev }
+      if (text) next[key] = text
+      else delete next[key]
+      return next
+    })
+    setNotePopover(null)
+  }
 
   // Close column picker on outside click
   useEffect(() => {
@@ -545,6 +645,8 @@ export default function ResourceTable({ resources, externalFilter = null, onClea
       saveActions(next)
       return next
     })
+    // sync to backend (fire-and-forget — localStorage keeps UI snappy)
+    api.saveActionStatus(rid.toLowerCase(), status || '').catch(() => {})
   }, [])
 
   const filtered = useMemo(() => {
@@ -628,6 +730,15 @@ export default function ResourceTable({ resources, externalFilter = null, onClea
   return (
     <>
       {cliResource && <CLIModal resource={cliResource} onClose={() => setCliResource(null)} />}
+      {notePopover && (
+        <NotePopover
+          resourceId={notePopover.resourceId}
+          initialValue={notes[notePopover.resourceId] || ''}
+          anchorRect={notePopover.anchorRect}
+          onSave={(text) => handleSaveNote(notePopover.resourceId, text)}
+          onClose={() => setNotePopover(null)}
+        />
+      )}
       {connectionResource && (
         <ResourceConnectionModal
           resource={connectionResource}
@@ -903,6 +1014,24 @@ export default function ResourceTable({ resources, externalFilter = null, onClea
                             ACTION_STATUS[actions[r.resource_id]]?.cls)}>
                             {ACTION_STATUS[actions[r.resource_id]]?.label}
                           </span>
+                        )}
+                        {/* Status note */}
+                        {notes[r.resource_id?.toLowerCase()] ? (
+                          <button
+                            onClick={e => { e.stopPropagation(); openNote(r.resource_id, e.currentTarget) }}
+                            className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded border mt-1 bg-amber-950/30 text-amber-400 border-amber-700/40 hover:bg-amber-900/50 transition-colors max-w-[190px]"
+                          >
+                            <StickyNote size={9} className="shrink-0" />
+                            <span className="truncate">{notes[r.resource_id?.toLowerCase()]}</span>
+                          </button>
+                        ) : (
+                          <button
+                            onClick={e => { e.stopPropagation(); openNote(r.resource_id, e.currentTarget) }}
+                            className="inline-flex items-center gap-1 text-xs text-gray-600 mt-1 opacity-0 group-hover:opacity-100 hover:text-amber-400 transition-all"
+                          >
+                            <StickyNote size={9} />
+                            <span>Add note</span>
+                          </button>
                         )}
                       </td>
 

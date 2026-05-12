@@ -1,9 +1,10 @@
-import React, { useMemo, useState } from 'react'
+import React, { useMemo, useState, useEffect } from 'react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Cell,
 } from 'recharts'
-import { Layers } from 'lucide-react'
+import { Layers, Pencil, Check, X } from 'lucide-react'
+import { api } from '../api/client'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -115,8 +116,57 @@ function RGTick({ x, y, payload }) {
 
 // ── Main component ─────────────────────────────────────────────────────────────
 
-export default function WasteByRG({ resources = [], onBarClick }) {
-  const [activeRG, setActiveRG] = useState(null)
+function RGDescriptionEditor({ rgName, initialValue, badge, onSave }) {
+  const [editing, setEditing] = useState(false)
+  const [text, setText]       = useState(initialValue || '')
+
+  async function save() {
+    await api.saveRgDescription(rgName, text).catch(() => {})
+    onSave(rgName, text)
+    setEditing(false)
+  }
+
+  if (!editing) return (
+    <div className="flex items-center gap-1.5 min-w-0">
+      {badge === 'ai' && (
+        <span className="shrink-0 text-[10px] font-medium px-1.5 py-px rounded bg-indigo-900/50 text-indigo-400 border border-indigo-800/50 leading-none">AI</span>
+      )}
+      {badge === 'edited' && (
+        <span className="shrink-0 text-[10px] font-medium px-1.5 py-px rounded bg-amber-900/40 text-amber-400 border border-amber-800/50 leading-none">Edited</span>
+      )}
+      <span className="text-xs text-gray-500 truncate flex-1">{initialValue || <span className="text-gray-700 italic">No description</span>}</span>
+      <button onClick={() => setEditing(true)} className="opacity-0 group-hover:opacity-100 text-gray-600 hover:text-blue-400 transition-all shrink-0">
+        <Pencil size={11} />
+      </button>
+    </div>
+  )
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <input
+        value={text}
+        onChange={e => setText(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false) }}
+        className="flex-1 bg-gray-800 border border-gray-600 rounded px-2 py-0.5 text-xs text-gray-200 placeholder-gray-600 focus:outline-none focus:border-blue-500"
+        placeholder="e.g. Microsoft Sentinel SIEM and security monitoring"
+        maxLength={80}
+        autoFocus
+      />
+      <button onClick={save} className="text-green-400 hover:text-green-300 shrink-0"><Check size={12} /></button>
+      <button onClick={() => setEditing(false)} className="text-gray-600 hover:text-gray-400 shrink-0"><X size={12} /></button>
+    </div>
+  )
+}
+
+export default function WasteByRG({ resources = [], rgDescriptions = {}, onBarClick, onDescriptionUpdate }) {
+  const [activeRG,     setActiveRG]    = useState(null)
+  const [descriptions, setDescriptions] = useState(rgDescriptions)
+  // overrides = keys that the user has manually edited (loaded from backend)
+  const [overrides, setOverrides] = useState({})
+
+  useEffect(() => {
+    api.getRgDescriptions().then(setOverrides).catch(() => {})
+  }, [])
 
   const chartData = useMemo(() => buildRGData(resources), [resources])
 
@@ -209,6 +259,34 @@ export default function WasteByRG({ resources = [], onBarClick }) {
         ))}
         <span className="text-xs text-gray-700 ml-1 self-center">= worst resource status in that RG</span>
       </div>
+
+      {/* RG Descriptions — editable, shown in PDF */}
+      {chartData.length > 0 && (
+        <div className="mt-3 pt-3 border-t border-gray-800/60 space-y-1.5">
+          <p className="text-xs text-gray-600 mb-2">Resource group descriptions <span className="text-gray-700">— shown in PDF report</span></p>
+          {chartData.map(d => {
+            const isOverridden = d.rg in overrides
+            const isAI = !isOverridden && !!rgDescriptions[d.rg]
+            const badge = isOverridden ? 'edited' : isAI ? 'ai' : null
+            return (
+              <div key={d.rg} className="flex items-start gap-2 group">
+                <span className="text-xs text-gray-400 w-36 shrink-0 truncate pt-0.5" title={d.rg}>{d.rg}</span>
+                <div className="flex-1 min-w-0">
+                  <RGDescriptionEditor
+                    rgName={d.rg}
+                    initialValue={descriptions[d.rg] || ''}
+                    badge={badge}
+                    onSave={(name, text) => {
+                      setDescriptions(prev => ({ ...prev, [name]: text }))
+                      setOverrides(prev => ({ ...prev, [name]: text }))
+                    }}
+                  />
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
 
     </div>
   )

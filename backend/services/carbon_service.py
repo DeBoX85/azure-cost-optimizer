@@ -104,3 +104,14 @@ def carbon_equivalents(total_kg: float) -> dict:
         "trees_to_offset":     round(total_kg / 22.0,  0),
         "smartphones_charged": round(total_kg / 0.008, 0),
     }
+
+
+# On-premises multiplier based on industry research (AWS 2023, Accenture 2020):
+# On-prem servers typically run at 15–20% utilisation vs cloud's higher density.
+# Combined with cloud providers' renewable energy commitments, cloud is ~3.5x more
+# carbon-efficient per workload unit than equivalent on-prem infrastructure.
+ONPREM_MULTIPLIER = 3.5
+
+def onprem_equivalent_kg(cloud_kg: float) -> float:
+    """Estimated kgCO2/month if the same workloads ran on on-premises hardware."""
+    return round(cloud_kg * ONPREM_MULTIPLIER, 1)

@@ -354,3 +354,6 @@ class DashboardData(BaseModel):
     # Aggregated daily totals for the spend-trend chart (not per-resource, no pagination risk)
     total_daily_cm:           List[float] = Field(default_factory=list)  # current month day 1→today
     total_daily_pm:           List[float] = Field(default_factory=list)  # full previous month
+    monthly_spend_totals:     List[float] = Field(default_factory=list)  # 6-month subscription totals oldest→newest
+    carbon_onprem_kg:         float = 0.0  # estimated kgCO2/month if same workloads ran on-prem
+    rg_descriptions:          Dict[str, str] = Field(default_factory=dict)  # rg_name → one-liner (AI or manual override)

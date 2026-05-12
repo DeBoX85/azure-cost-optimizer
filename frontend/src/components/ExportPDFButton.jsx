@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
-import { pdf, Document, Page, Text, View, StyleSheet, Font, Svg, Path, Rect, Circle, Polyline } from '@react-pdf/renderer'
+import { pdf, Document, Page, Text, View, StyleSheet, Font, Svg, Path, Rect, Circle, Polyline, G, Image, Text as SvgText } from '@react-pdf/renderer'
 import { FileDown, Loader } from 'lucide-react'
+import { api } from '../api/client'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -11,18 +12,18 @@ const date = () => new Date().toLocaleDateString('en-US', { year: 'numeric', mon
 // ── Styles ─────────────────────────────────────────────────────────────────────
 
 const C = {
-  bg:        '#0f172a',
-  bgCard:    '#1e293b',
-  bgLight:   '#334155',
-  accent:    '#3b82f6',
+  bg:        '#ffffff',
+  bgCard:    '#f8fafc',
+  bgLight:   '#f1f5f9',
+  accent:    '#2563eb',
   accentDim: '#1d4ed8',
-  success:   '#22c55e',
-  warn:      '#f59e0b',
-  danger:    '#ef4444',
-  text:      '#f1f5f9',
-  textMuted: '#94a3b8',
-  textDim:   '#64748b',
-  border:    '#334155',
+  success:   '#16a34a',
+  warn:      '#d97706',
+  danger:    '#dc2626',
+  text:      '#0f172a',
+  textMuted: '#475569',
+  textDim:   '#94a3b8',
+  border:    '#e2e8f0',
   white:     '#ffffff',
   green:     '#86efac',
 }
@@ -40,10 +41,10 @@ const s = StyleSheet.create({
   coverLogo: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   coverLogoWordmark: { flexDirection: 'column', gap: 2 },
   coverLogoEyebrow: { fontSize: 8, color: C.textDim, letterSpacing: 2, fontFamily: 'Helvetica-Bold' },
-  coverLogoTitle: { fontSize: 16, color: C.white, fontFamily: 'Helvetica-Bold' },
+  coverLogoTitle: { fontSize: 16, color: C.text, fontFamily: 'Helvetica-Bold' },
   coverLogoTagline: { fontSize: 7.5, color: C.textDim },
   coverCenter: { flex: 1, justifyContent: 'center', paddingVertical: 40 },
-  coverTitle: { fontSize: 32, fontFamily: 'Helvetica-Bold', color: C.white, marginBottom: 10 },
+  coverTitle: { fontSize: 32, fontFamily: 'Helvetica-Bold', color: C.text, marginBottom: 10 },
   coverSubtitle: { fontSize: 14, color: C.textMuted, marginBottom: 28 },
   coverMeta: { backgroundColor: C.bgCard, borderRadius: 10, padding: 20, gap: 8, borderLeft: `3px solid ${C.accent}` },
   coverMetaRow: { flexDirection: 'row', gap: 6 },
@@ -54,15 +55,15 @@ const s = StyleSheet.create({
   // Section page
   inner: { padding: 40 },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 20, paddingBottom: 10, borderBottom: `1px solid ${C.border}` },
-  sectionTitle: { fontSize: 16, fontFamily: 'Helvetica-Bold', color: C.white },
-  sectionBadge: { marginLeft: 10, backgroundColor: C.accentDim, borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
-  sectionBadgeText: { fontSize: 8, color: C.white, fontFamily: 'Helvetica-Bold' },
+  sectionTitle: { fontSize: 16, fontFamily: 'Helvetica-Bold', color: C.text },
+  sectionBadge: { marginLeft: 10, backgroundColor: '#dbeafe', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
+  sectionBadgeText: { fontSize: 8, color: C.text, fontFamily: 'Helvetica-Bold' },
 
   // KPI grid
   kpiGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 24 },
   kpiCard: { width: '30%', backgroundColor: C.bgCard, borderRadius: 8, padding: 14, borderTop: `2px solid ${C.accent}` },
   kpiLabel: { fontSize: 8, color: C.textDim, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 },
-  kpiValue: { fontSize: 20, fontFamily: 'Helvetica-Bold', color: C.white },
+  kpiValue: { fontSize: 20, fontFamily: 'Helvetica-Bold', color: C.text },
   kpiSub: { fontSize: 8, color: C.textMuted, marginTop: 3 },
 
   // Table
@@ -70,16 +71,16 @@ const s = StyleSheet.create({
   tableHead: { flexDirection: 'row', backgroundColor: C.bgLight, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6, marginBottom: 2 },
   tableHeadCell: { fontSize: 8, fontFamily: 'Helvetica-Bold', color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
   tableRow: { flexDirection: 'row', paddingHorizontal: 10, paddingVertical: 7, borderBottom: `1px solid ${C.border}` },
-  tableRowAlt: { backgroundColor: '#ffffff08' },
+  tableRowAlt: { backgroundColor: '#f1f5f9' },
   tableCell: { fontSize: 8.5, color: C.text },
   tableCellMuted: { fontSize: 8.5, color: C.textMuted },
 
   // Pill
-  pillGreen:  { backgroundColor: '#14532d', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1.5 },
-  pillRed:    { backgroundColor: '#450a0a', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1.5 },
-  pillYellow: { backgroundColor: '#451a03', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1.5 },
-  pillBlue:   { backgroundColor: '#1e3a5f', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1.5 },
-  pillText: { fontSize: 7.5, fontFamily: 'Helvetica-Bold' },
+  pillGreen:  { backgroundColor: '#dcfce7', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1.5 },
+  pillRed:    { backgroundColor: '#fee2e2', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1.5 },
+  pillYellow: { backgroundColor: '#fef3c7', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1.5 },
+  pillBlue:   { backgroundColor: '#dbeafe', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1.5 },
+  pillText: { fontSize: 7.5, fontFamily: 'Helvetica-Bold', color: C.text },
 
   // AI narrative
   narrativeBox: { backgroundColor: C.bgCard, borderRadius: 8, padding: 16, borderLeft: `3px solid ${C.accent}` },
@@ -98,7 +99,7 @@ const s = StyleSheet.create({
   actionNum: { width: 24, height: 24, borderRadius: 12, backgroundColor: C.accentDim, justifyContent: 'center', alignItems: 'center' },
   actionNumText: { fontSize: 9, color: C.white, fontFamily: 'Helvetica-Bold' },
   actionBody: { flex: 1 },
-  actionTitle: { fontSize: 9, fontFamily: 'Helvetica-Bold', color: C.white, marginBottom: 3 },
+  actionTitle: { fontSize: 9, fontFamily: 'Helvetica-Bold', color: C.text, marginBottom: 3 },
   actionDesc: { fontSize: 8, color: C.textMuted, lineHeight: 1.6 },
   actionSavings: { fontSize: 12, fontFamily: 'Helvetica-Bold', color: C.success, textAlign: 'right' },
   actionSavingsSub: { fontSize: 7.5, color: C.textDim, textAlign: 'right' },
@@ -199,12 +200,12 @@ function LogoIcon({ size = 52 }) {
   return (
     <Svg width={size} height={size} viewBox="0 8 56 56">
       {/* Background rounded rect */}
-      <Rect x="0" y="8" width="56" height="56" rx="12" fill="#ffffff" fillOpacity="0.15" />
+      <Rect x="0" y="8" width="56" height="56" rx="12" fill="#2563eb" fillOpacity="1" />
       {/* Cloud shape */}
       <Path
         d="M40 38H19C16.2 38 14 35.8 14 33c0-2.4 1.7-4.4 4-4.9V28c0-3.9 3.1-7 7-7 1.9 0 3.6.7 4.9 1.9C30.8 22 32.3 21.5 34 21.5c2.9 0 5.2 2.3 5.2 5.2v.1c1.9.6 3.3 2.4 3.3 4.5C42.5 34 41.5 38 40 38z"
         fill="#ffffff"
-        fillOpacity="0.9"
+        fillOpacity="1"
       />
       {/* Trend line (cost going down = savings) */}
       <Polyline
@@ -241,20 +242,30 @@ function PageFooter({ subscriptionId }) {
 
 // ── Cover page ─────────────────────────────────────────────────────────────────
 
-function CoverPage({ kpi, subscriptionId, subscriptionName, generatedAt }) {
+function CoverPage({ kpi, subscriptionId, subscriptionName, generatedAt, logoDataUrl }) {
   const momSign = kpi.mom_cost_delta >= 0 ? '+' : ''
   return (
     <Page size="A4" style={s.page}>
       <View style={s.cover}>
-        {/* Logo */}
-        <View style={s.coverLogo}>
-          <LogoIcon size={52} />
-          <View style={s.coverLogoWordmark}>
-            <Text style={s.coverLogoEyebrow}>AZURE</Text>
-            <Text style={s.coverLogoTitle}>Cost Optimizer</Text>
-            <Text style={s.coverLogoTagline}>Reduce spend · Enforce governance</Text>
+        {/* Header: company logo (if set) left + tool name right, else tool SVG logo */}
+        {logoDataUrl ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Image src={logoDataUrl} style={{ height: 34, maxWidth: 160, objectFit: 'contain' }} />
+            <View style={{ flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+              <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: C.text, letterSpacing: 0.3 }}>Azure Cost Optimizer</Text>
+              <Text style={{ fontSize: 7.5, color: C.textDim }}>Reduce spend · Enforce governance</Text>
+            </View>
           </View>
-        </View>
+        ) : (
+          <View style={s.coverLogo}>
+            <LogoIcon size={52} />
+            <View style={s.coverLogoWordmark}>
+              <Text style={s.coverLogoEyebrow}>AZURE</Text>
+              <Text style={s.coverLogoTitle}>Cost Optimizer</Text>
+              <Text style={s.coverLogoTagline}>Reduce spend · Enforce governance</Text>
+            </View>
+          </View>
+        )}
 
         {/* Title block */}
         <View style={s.coverCenter}>
@@ -324,15 +335,20 @@ function CoverPage({ kpi, subscriptionId, subscriptionName, generatedAt }) {
 
 // ── Executive Summary ──────────────────────────────────────────────────────────
 
-function SummaryPage({ kpi, tagCompliancePct, totalCarbon, subscriptionId }) {
+function SummaryPage({ kpi, tagCompliancePct, totalCarbon, carbonOnpremKg = 0, subscriptionId }) {
   const momSign = kpi.mom_cost_delta_pct >= 0 ? '+' : ''
+  // Orphan cost is already counted inside total_potential_savings — show them as separate buckets
+  const savingsOnly  = Math.max(0, (kpi.total_potential_savings || 0) - (kpi.orphan_cost || 0))
+  const orphanCost   = kpi.orphan_cost || 0
+  const totalRecovery = savingsOnly + orphanCost
+
   const kpis = [
-    { label: 'Current Month Spend',      value: fmt(kpi.total_cost_current_month),     sub: `${momSign}${pct(kpi.mom_cost_delta_pct)} vs last month`, color: C.accent },
-    { label: 'Potential Monthly Savings', value: fmt(kpi.total_potential_savings),      sub: `${kpi.total_resources} resources scanned`,               color: C.success },
-    { label: 'Health Score',             value: pct(kpi.health_score_pct),              sub: 'Actively / Fully Used resources',                        color: healthColor(kpi.health_score_pct) },
-    { label: 'Orphaned Resources',       value: kpi.orphan_count,                       sub: `Wasting ${fmt(kpi.orphan_cost)} / month`,                color: orphanColor(kpi.orphan_count) },
-    { label: 'Tag Compliance',           value: pct(tagCompliancePct),                  sub: 'Resources with required tags',                           color: complianceColor(tagCompliancePct) },
-    { label: 'Carbon Footprint',         value: `${Number(totalCarbon).toFixed(1)} kg`, sub: 'CO₂ equivalent per month',                               color: C.textDim },
+    { label: 'Current Month Spend',    value: fmt(kpi.total_cost_current_month),     sub: `${momSign}${pct(kpi.mom_cost_delta_pct)} vs last month`,          color: C.accent },
+    { label: 'Savings Opportunities',  value: fmt(savingsOnly),                      sub: `Right-sizing, reservations & waste · ${kpi.total_resources} scanned`, color: C.success },
+    { label: 'Health Score',           value: pct(kpi.health_score_pct),             sub: '% of resources actively in use (separate from Efficiency Grade)',  color: healthColor(kpi.health_score_pct) },
+    { label: 'Orphaned Resources',     value: kpi.orphan_count,                      sub: `${fmt(orphanCost)}/mo in unused resources — safe to remove`,       color: orphanColor(kpi.orphan_count) },
+    { label: 'Tag Compliance',         value: pct(tagCompliancePct),                 sub: 'Resources with required tags applied',                             color: complianceColor(tagCompliancePct) },
+    { label: 'Carbon Footprint',       value: `${Number(totalCarbon).toFixed(1)} kg CO₂`, sub: carbonOnpremKg > 0 ? `On-prem equiv: ~${carbonOnpremKg.toFixed(0)} kg — see Spend History page` : 'CO₂ equivalent per month', color: C.success },
   ]
 
   const hasGrade = kpi.cost_grade && kpi.cost_grade !== '—'
@@ -354,8 +370,11 @@ function SummaryPage({ kpi, tagCompliancePct, totalCarbon, subscriptionId }) {
             </View>
             <View style={{ width: 1, backgroundColor: C.border, alignSelf: 'stretch' }} />
             <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 8.5, color: C.textMuted, lineHeight: 1.5, marginBottom: 8 }}>
+              <Text style={{ fontSize: 8.5, color: C.textMuted, lineHeight: 1.5, marginBottom: 6 }}>
                 {kpi.cost_score_label || 'Composite score across spend efficiency, resource health, governance, and Azure Advisor recommendations.'}
+              </Text>
+              <Text style={{ fontSize: 7.5, color: C.textDim, lineHeight: 1.5, marginBottom: 8 }}>
+                Note: the Health Score card below is a separate measure — it reflects the proportion of resources that are actively in use, independent of cost efficiency.
               </Text>
               <Svg width={260} height={8}>
                 <Rect x={0} y={1} width={260} height={6} fill={C.bgLight} rx={3} />
@@ -370,20 +389,178 @@ function SummaryPage({ kpi, tagCompliancePct, totalCarbon, subscriptionId }) {
           {kpis.map((k, i) => (
             <View key={i} style={{ ...s.kpiCard, borderTopColor: k.color }}>
               <Text style={s.kpiLabel}>{k.label}</Text>
-              <Text style={{ ...s.kpiValue, color: k.color === C.danger ? C.danger : k.color === C.warn ? C.warn : C.white }}>{k.value}</Text>
+              <Text style={{ ...s.kpiValue, color: k.color === C.danger ? C.danger : k.color === C.warn ? C.warn : C.text }}>{k.value}</Text>
               <Text style={s.kpiSub}>{k.sub}</Text>
             </View>
           ))}
         </View>
 
+        {/* Total recovery callout */}
+        {totalRecovery > 0 && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#f0fdf4', borderRadius: 6, padding: 10, marginTop: 12, gap: 8, borderLeft: `3px solid ${C.success}` }}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 8, color: C.textMuted, marginBottom: 3 }}>
+                Total potential recovery = Savings Opportunities + Orphan Waste
+              </Text>
+              <Text style={{ fontSize: 8, color: C.textMuted }}>
+                {fmt(savingsOnly)} (right-sizing &amp; reservations){'  +  '}{fmt(orphanCost)} (orphaned resources){'  =  '}
+                <Text style={{ fontFamily: 'Helvetica-Bold', color: '#16a34a' }}>{fmt(totalRecovery)}/mo</Text>
+              </Text>
+            </View>
+          </View>
+        )}
+
         {/* Advisor callout */}
         {kpi.advisor_total_recs > 0 && (
-          <View style={{ ...s.narrativeBox, borderLeftColor: C.warn, marginTop: 4 }}>
+          <View style={{ ...s.narrativeBox, borderLeftColor: C.warn, marginTop: 10 }}>
             <Text style={{ fontSize: 9, color: C.warn, fontFamily: 'Helvetica-Bold', marginBottom: 4 }}>
               Azure Advisor — {kpi.advisor_total_recs} recommendation{kpi.advisor_total_recs !== 1 ? 's' : ''}
             </Text>
             <Text style={s.narrativeText}>
               Azure Advisor has flagged {kpi.advisor_total_recs} items for review. These are factored into the resource scores shown in this report.
+            </Text>
+          </View>
+        )}
+      </View>
+      <PageFooter subscriptionId={subscriptionId} />
+    </Page>
+  )
+}
+
+// ── 6-Month Spend Trend ────────────────────────────────────────────────────────
+
+function SpendTrendPage({ monthlySpendTotals = [], carbonCloudKg = 0, carbonOnpremKg = 0, subscriptionId }) {
+  if (!monthlySpendTotals.length) return null
+
+  const now = new Date()
+  const monthLabels = []
+  for (let i = monthlySpendTotals.length - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    monthLabels.push(d.toLocaleString('en-US', { month: 'short', year: '2-digit' }))
+  }
+
+  const total    = monthlySpendTotals.reduce((s, v) => s + v, 0)
+  const avg      = total / monthlySpendTotals.length
+  const first    = monthlySpendTotals[0] || 0
+  const last     = monthlySpendTotals[monthlySpendTotals.length - 1] || 0
+  const trendPct = first > 0 ? ((last - first) / first) * 100 : 0
+  const trendLabel = trendPct > 2 ? `↑ ${trendPct.toFixed(1)}% over 6 months` : trendPct < -2 ? `↓ ${Math.abs(trendPct).toFixed(1)}% over 6 months` : 'Stable over 6 months'
+  const trendColor = trendPct > 5 ? C.danger : trendPct < -5 ? C.success : C.textMuted
+
+  // SVG bar chart dimensions
+  const chartW = 440
+  const chartH = 110
+  const barCount = monthlySpendTotals.length
+  const barGap  = 12
+  const barW    = Math.floor((chartW - barGap * (barCount - 1)) / barCount)
+  const maxVal  = Math.max(...monthlySpendTotals, 1)
+
+  const carbonSaving = carbonOnpremKg - carbonCloudKg
+  const carbonPct    = carbonOnpremKg > 0 ? Math.round((carbonSaving / carbonOnpremKg) * 100) : 0
+
+  return (
+    <Page size="A4" style={s.page}>
+      <View style={s.inner}>
+        <View style={s.sectionHeader}>
+          <Text style={s.sectionTitle}>6-Month Spend History</Text>
+          <View style={{ ...s.sectionBadge, backgroundColor: '#eff6ff' }}>
+            <Text style={{ ...s.sectionBadgeText, color: C.accent }}>{trendLabel}</Text>
+          </View>
+        </View>
+
+        {/* KPI row */}
+        <View style={{ flexDirection: 'row', gap: 12, marginBottom: 20 }}>
+          <View style={{ flex: 1, backgroundColor: C.bgCard, borderRadius: 8, padding: 12, borderTop: `2px solid ${C.accent}` }}>
+            <Text style={s.kpiLabel}>6-Month Total</Text>
+            <Text style={{ ...s.kpiValue, fontSize: 16 }}>{fmt(total)}</Text>
+            <Text style={s.kpiSub}>All subscriptions combined</Text>
+          </View>
+          <View style={{ flex: 1, backgroundColor: C.bgCard, borderRadius: 8, padding: 12, borderTop: `2px solid ${C.textDim}` }}>
+            <Text style={s.kpiLabel}>Monthly Average</Text>
+            <Text style={{ ...s.kpiValue, fontSize: 16 }}>{fmt(avg)}</Text>
+            <Text style={s.kpiSub}>Per calendar month</Text>
+          </View>
+          <View style={{ flex: 1, backgroundColor: C.bgCard, borderRadius: 8, padding: 12, borderTop: `2px solid ${trendColor}` }}>
+            <Text style={s.kpiLabel}>Spend Trend</Text>
+            <Text style={{ ...s.kpiValue, fontSize: 16, color: trendColor }}>{trendPct > 0 ? '+' : ''}{trendPct.toFixed(1)}%</Text>
+            <Text style={s.kpiSub}>First vs most recent month</Text>
+          </View>
+        </View>
+
+        {/* Bar chart */}
+        <View style={{ marginBottom: 20 }}>
+          <Svg width={chartW} height={chartH + 20}>
+            {monthlySpendTotals.map((val, i) => {
+              const barH  = Math.max(4, Math.round((val / maxVal) * chartH))
+              const x     = i * (barW + barGap)
+              const y     = chartH - barH
+              const isLast = i === monthlySpendTotals.length - 1
+              const fill  = isLast ? '#f59e0b' : '#3b82f6'
+              const opacity = isLast ? 0.85 : 0.5 + (i / monthlySpendTotals.length) * 0.4
+              return (
+                <G key={i}>
+                  <Rect x={x} y={y} width={barW} height={barH} fill={fill} fillOpacity={opacity} rx={3} />
+                  <SvgText x={x + barW / 2} y={chartH + 14} fontSize={8} fill="#9ca3af" textAnchor="middle">{monthLabels[i]}</SvgText>
+                  <SvgText x={x + barW / 2} y={y - 4} fontSize={7} fill={isLast ? '#f59e0b' : '#6b7280'} textAnchor="middle">{fmt(val)}</SvgText>
+                </G>
+              )
+            })}
+          </Svg>
+          <Text style={{ fontSize: 7, color: C.textDim, marginTop: 4 }}>
+            Amber bar = current (partial) month · Blue bars = completed months
+          </Text>
+        </View>
+
+        {/* Month-by-month table */}
+        <View style={s.table}>
+          <View style={s.tableHead}>
+            <Text style={{ ...s.tableHeadCell, flex: 1.5 }}>Month</Text>
+            <Text style={{ ...s.tableHeadCell, flex: 1, textAlign: 'right' }}>Spend</Text>
+            <Text style={{ ...s.tableHeadCell, flex: 1, textAlign: 'right' }}>vs Prev Month</Text>
+          </View>
+          {monthlySpendTotals.map((val, i) => {
+            const prev    = i > 0 ? monthlySpendTotals[i - 1] : null
+            const delta   = prev != null && prev > 0 ? ((val - prev) / prev) * 100 : null
+            const isLast  = i === monthlySpendTotals.length - 1
+            return (
+              <View key={i} style={[s.tableRow, i % 2 === 1 ? s.tableRowAlt : {}]}>
+                <View style={{ flex: 1.5, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text style={s.tableCell}>{monthLabels[i]}</Text>
+                  {isLast && <View style={{ backgroundColor: '#fef3c7', borderRadius: 3, paddingHorizontal: 4, paddingVertical: 1 }}><Text style={{ fontSize: 6, color: '#92400e' }}>CURRENT</Text></View>}
+                </View>
+                <Text style={{ ...s.tableCell, flex: 1, textAlign: 'right', fontFamily: 'Helvetica-Bold' }}>{fmt(val)}</Text>
+                <Text style={{ ...s.tableCell, flex: 1, textAlign: 'right', color: delta == null ? C.textDim : delta > 5 ? C.danger : delta < -5 ? C.success : C.textMuted }}>
+                  {delta == null ? '—' : `${delta > 0 ? '+' : ''}${delta.toFixed(1)}%`}
+                </Text>
+              </View>
+            )
+          })}
+        </View>
+
+        {/* Carbon comparison callout */}
+        {carbonCloudKg > 0 && carbonOnpremKg > 0 && (
+          <View style={{ marginTop: 20, backgroundColor: '#f0fdf4', borderRadius: 8, padding: 14, borderLeft: `3px solid ${C.success}` }}>
+            <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: '#166534', marginBottom: 6 }}>
+              Carbon Footprint — Cloud vs On-Premises
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 20, marginBottom: 8 }}>
+              <View>
+                <Text style={{ fontSize: 8, color: C.textMuted }}>Azure Cloud</Text>
+                <Text style={{ fontSize: 14, fontFamily: 'Helvetica-Bold', color: '#16a34a' }}>{carbonCloudKg.toFixed(1)} kg CO₂/mo</Text>
+              </View>
+              <View style={{ justifyContent: 'center' }}>
+                <Text style={{ fontSize: 12, color: C.textDim }}>vs</Text>
+              </View>
+              <View>
+                <Text style={{ fontSize: 8, color: C.textMuted }}>On-Premises Equivalent</Text>
+                <Text style={{ fontSize: 14, fontFamily: 'Helvetica-Bold', color: C.textMuted }}>{carbonOnpremKg.toFixed(1)} kg CO₂/mo</Text>
+              </View>
+              <View style={{ justifyContent: 'center', backgroundColor: '#dcfce7', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6 }}>
+                <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: '#166534' }}>{carbonPct}% more efficient</Text>
+              </View>
+            </View>
+            <Text style={{ fontSize: 7.5, color: C.textMuted, lineHeight: 1.5 }}>
+              On-premises estimate based on industry research (AWS 2023, Accenture 2020): cloud infrastructure is approximately 3.5× more carbon-efficient than equivalent on-premises hardware, due to higher server utilisation rates, hypervisor density, and cloud providers' renewable energy commitments.
             </Text>
           </View>
         )}
@@ -485,7 +662,7 @@ function SavingsPage({ savings, resources, subscriptionId }) {
 
 // ── Right-Sizing ───────────────────────────────────────────────────────────────
 
-function RightSizePage({ rightsize, subscriptionId }) {
+function RightSizePage({ rightsize, notes = {}, subscriptionId }) {
   const top = (rightsize || []).slice(0, 12)
   if (!top.length) return null
 
@@ -509,16 +686,26 @@ function RightSizePage({ rightsize, subscriptionId }) {
             <Text style={{ ...s.tableHeadCell, flex: 0.9 }}>Savings</Text>
           </View>
           {top.map((r, i) => (
-            <View key={i} style={[s.tableRow, i % 2 === 1 ? s.tableRowAlt : {}]}>
-              <View style={{ flex: 2 }}>
-                <Text style={s.tableCell}>{r.resource_name}</Text>
-                <Text style={s.tableCellMuted}>{r.resource_group}</Text>
+            <React.Fragment key={i}>
+              <View style={[s.tableRow, i % 2 === 1 ? s.tableRowAlt : {}]}>
+                <View style={{ flex: 2 }}>
+                  <Text style={s.tableCell}>{r.resource_name}</Text>
+                  <Text style={s.tableCellMuted}>{r.resource_group}</Text>
+                </View>
+                <Text style={{ ...s.tableCellMuted, flex: 1.2 }}>{r.current_sku}</Text>
+                <Text style={{ ...s.tableCell, flex: 1.2, color: C.success }}>{r.suggested_sku}</Text>
+                <Text style={{ ...s.tableCellMuted, flex: 0.8 }}>{r.cpu_pct != null ? `${r.cpu_pct.toFixed(0)}%` : '—'}</Text>
+                <Text style={{ ...s.tableCell, flex: 0.9, color: C.success, fontFamily: 'Helvetica-Bold' }}>{fmt(r.estimated_savings)}</Text>
               </View>
-              <Text style={{ ...s.tableCellMuted, flex: 1.2 }}>{r.current_sku}</Text>
-              <Text style={{ ...s.tableCell, flex: 1.2, color: C.success }}>{r.suggested_sku}</Text>
-              <Text style={{ ...s.tableCellMuted, flex: 0.8 }}>{r.cpu_pct != null ? `${r.cpu_pct.toFixed(0)}%` : '—'}</Text>
-              <Text style={{ ...s.tableCell, flex: 0.9, color: C.success, fontFamily: 'Helvetica-Bold' }}>{fmt(r.estimated_savings)}</Text>
-            </View>
+              {notes[r.resource_id?.toLowerCase()] && (
+                <View style={{ paddingHorizontal: 10, paddingBottom: 6, borderBottom: `1px solid ${C.border}` }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 6, backgroundColor: '#fef9ec', borderRadius: 3, paddingHorizontal: 8, paddingVertical: 4, borderLeft: '2px solid #d97706' }}>
+                    <Text style={{ fontSize: 6.5, fontFamily: 'Helvetica-Bold', color: '#92400e', paddingTop: 1 }}>NOTE</Text>
+                    <Text style={{ fontSize: 7.5, color: '#78350f', flex: 1, lineHeight: 1.5 }}>{notes[r.resource_id?.toLowerCase()]}</Text>
+                  </View>
+                </View>
+              )}
+            </React.Fragment>
           ))}
         </View>
 
@@ -557,7 +744,7 @@ function OrphansPage({ orphans, resources, subscriptionId }) {
       <View style={s.inner}>
         <View style={s.sectionHeader}>
           <Text style={s.sectionTitle}>Orphaned Resources</Text>
-          <View style={{ ...s.sectionBadge, backgroundColor: '#450a0a' }}>
+          <View style={{ ...s.sectionBadge, backgroundColor: '#fee2e2' }}>
             <Text style={s.sectionBadgeText}>{orphans.length} ITEMS</Text>
           </View>
         </View>
@@ -670,7 +857,7 @@ function ReservationsPage({ resources, activeReservations, subscriptionId }) {
       <View style={s.inner}>
         <View style={s.sectionHeader}>
           <Text style={s.sectionTitle}>Reserved Instance Recommendations</Text>
-          <View style={{ ...s.sectionBadge, backgroundColor: '#14532d' }}>
+          <View style={{ ...s.sectionBadge, backgroundColor: '#dcfce7' }}>
             <Text style={s.sectionBadgeText}>{eligible.length} ELIGIBLE</Text>
           </View>
         </View>
@@ -741,8 +928,8 @@ function ReservationsPage({ resources, activeReservations, subscriptionId }) {
         {reserved.length > 0 && (
           <View style={{ marginTop: 24 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10, paddingBottom: 8, borderBottom: `1px solid ${C.border}` }}>
-              <Text style={{ fontSize: 13, fontFamily: 'Helvetica-Bold', color: C.white }}>Already Reserved</Text>
-              <View style={{ ...s.sectionBadge, backgroundColor: '#14532d', marginLeft: 10 }}>
+              <Text style={{ fontSize: 13, fontFamily: 'Helvetica-Bold', color: C.text }}>Already Reserved</Text>
+              <View style={{ ...s.sectionBadge, backgroundColor: '#dcfce7', marginLeft: 10 }}>
                 <Text style={s.sectionBadgeText}>{reserved.length} ACTIVE</Text>
               </View>
             </View>
@@ -795,8 +982,7 @@ const PHASE_COLORS = {
   downsize:  C.success,
 }
 
-function ActionPlanPage({ savings, resources, subscriptionId }) {
-  // Build resource lookup by id for safe_action_steps (P6)
+function ActionPlanPage({ savings, resources, notes = {}, actionStatuses = {}, subscriptionId }) {
   const resourceMap = {}
   ;(resources || []).forEach(r => {
     if (r.resource_id) resourceMap[r.resource_id.toLowerCase()] = r
@@ -804,16 +990,22 @@ function ActionPlanPage({ savings, resources, subscriptionId }) {
 
   const priorityColor = (p) => p === 'High' ? C.danger : p === 'Medium' ? C.warn : C.accent
 
-  // Only include scored (non-Unknown) items with real savings (P8)
-  const actionable = (savings || [])
+  const scored = (savings || [])
     .filter(r => {
       const res = resourceMap[r.resource_id?.toLowerCase()]
       return (res?.score_label !== 'Unknown') && (r.estimated_monthly_savings > 0)
     })
     .sort((a, b) => (b.estimated_monthly_savings || 0) - (a.estimated_monthly_savings || 0))
-    .slice(0, 10)
 
-  if (!actionable.length) return null
+  // Done = excluded entirely. Won't Fix = moved to reviewed section. Snoozed = kept with marker.
+  const actionable    = scored.filter(r => {
+    const st = actionStatuses[r.resource_id?.toLowerCase()]
+    return st !== 'done' && st !== 'wontfix'
+  }).slice(0, 10)
+
+  const reviewed = scored.filter(r => actionStatuses[r.resource_id?.toLowerCase()] === 'wontfix')
+
+  if (!actionable.length && !reviewed.length) return null
 
   const totalSavings = actionable.reduce((sum, r) => sum + (r.estimated_monthly_savings || 0), 0)
 
@@ -836,20 +1028,35 @@ function ActionPlanPage({ savings, resources, subscriptionId }) {
           const res      = resourceMap[r.resource_id?.toLowerCase()]
           const steps    = (res?.safe_action_steps || []).slice(0, 3)
           const priority = computePriority(r)
+          const isSnoozed = actionStatuses[r.resource_id?.toLowerCase()] === 'snoozed'
           return (
             <View key={i} style={s.actionRow} wrap={false}>
               <View style={s.actionNum}>
                 <Text style={s.actionNumText}>{i + 1}</Text>
               </View>
               <View style={s.actionBody}>
-                <Text style={s.actionTitle}>{r.resource_name}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                  <Text style={s.actionTitle}>{r.resource_name}</Text>
+                  {isSnoozed && (
+                    <View style={{ backgroundColor: '#fef3c7', borderRadius: 3, paddingHorizontal: 4, paddingVertical: 1 }}>
+                      <Text style={{ fontSize: 6, color: '#92400e', fontFamily: 'Helvetica-Bold' }}>SNOOZED</Text>
+                    </View>
+                  )}
+                </View>
                 <Text style={{ fontSize: 7.5, color: priorityColor(priority), fontFamily: 'Helvetica-Bold', marginBottom: 3 }}>
                   {priority.toUpperCase()} PRIORITY  ·  {humanType(r.resource_type)}  ·  {r.resource_group}
                 </Text>
                 <Text style={s.actionDesc}>{r.recommendation || r.ai_action || 'Review resource with owning team.'}</Text>
+                {/* Status note — why this saving isn't being actioned */}
+                {notes[r.resource_id?.toLowerCase()] && (
+                  <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginTop: 6, backgroundColor: '#fef9ec', borderRadius: 4, paddingHorizontal: 8, paddingVertical: 5, borderLeft: '2px solid #d97706' }}>
+                    <Text style={{ fontSize: 6.5, fontFamily: 'Helvetica-Bold', color: '#92400e', paddingTop: 1 }}>NOTE</Text>
+                    <Text style={{ fontSize: 7.5, color: '#78350f', flex: 1, lineHeight: 1.55 }}>{notes[r.resource_id?.toLowerCase()]}</Text>
+                  </View>
+                )}
                 {/* Protected resource caution — shown BEFORE steps so engineers read it first */}
                 {res?.is_protected && (
-                  <View style={{ flexDirection: 'row', gap: 5, alignItems: 'center', marginTop: 5, backgroundColor: '#451a03', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 3 }}>
+                  <View style={{ flexDirection: 'row', gap: 5, alignItems: 'center', marginTop: 5, backgroundColor: '#fef3c7', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 3 }}>
                     <Text style={{ fontSize: 7, color: C.warn, fontFamily: 'Helvetica-Bold' }}>⚠ PROTECTED —</Text>
                     <Text style={{ fontSize: 7, color: C.warn, flex: 1 }}>
                       {res.protection_reason || 'Resource has locks, backup, or RI coverage. Review before taking any action.'}
@@ -887,10 +1094,47 @@ function ActionPlanPage({ savings, resources, subscriptionId }) {
         })}
 
         {/* Fixed total label (P4) */}
-        <View style={{ flexDirection: 'row', justifyContent: 'flex-end', paddingTop: 12, borderTop: `1px solid ${C.border}`, marginTop: 4 }}>
-          <Text style={{ fontSize: 9, color: C.textMuted, marginRight: 8 }}>Top {actionable.length} actions total:</Text>
-          <Text style={{ fontSize: 9, color: C.success, fontFamily: 'Helvetica-Bold' }}>{fmt(totalSavings)} / month</Text>
-        </View>
+        {actionable.length > 0 && (
+          <View style={{ flexDirection: 'row', justifyContent: 'flex-end', paddingTop: 12, borderTop: `1px solid ${C.border}`, marginTop: 4 }}>
+            <Text style={{ fontSize: 9, color: C.textMuted, marginRight: 8 }}>Top {actionable.length} actions total:</Text>
+            <Text style={{ fontSize: 9, color: C.success, fontFamily: 'Helvetica-Bold' }}>{fmt(totalSavings)} / month</Text>
+          </View>
+        )}
+
+        {/* Reviewed — Not Actioning */}
+        {reviewed.length > 0 && (
+          <View style={{ marginTop: 20 }} wrap={false}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8, paddingBottom: 8, borderBottom: `1px solid ${C.border}` }}>
+              <Text style={{ fontSize: 11, fontFamily: 'Helvetica-Bold', color: C.text }}>Reviewed — Not Actioning</Text>
+              <View style={{ backgroundColor: '#f1f5f9', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 }}>
+                <Text style={{ fontSize: 7, color: C.textMuted, fontFamily: 'Helvetica-Bold' }}>{reviewed.length} ITEM{reviewed.length !== 1 ? 'S' : ''}</Text>
+              </View>
+            </View>
+            <Text style={{ fontSize: 8, color: C.textMuted, lineHeight: 1.6, marginBottom: 10 }}>
+              The following savings opportunities have been reviewed and a decision made not to action them at this time.
+              Each item includes the reason provided.
+            </Text>
+            {reviewed.map((r, i) => {
+              const note = notes[r.resource_id?.toLowerCase()]
+              return (
+                <View key={i} style={{ flexDirection: 'row', gap: 10, paddingVertical: 7, borderBottom: `1px solid ${C.bgLight}` }} wrap={false}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 8.5, fontFamily: 'Helvetica-Bold', color: C.text }}>{r.resource_name}</Text>
+                    <Text style={{ fontSize: 7, color: C.textDim, marginTop: 1 }}>{humanType(r.resource_type)}  ·  {r.resource_group}</Text>
+                    {note
+                      ? <Text style={{ fontSize: 7.5, color: '#78350f', marginTop: 4, lineHeight: 1.5, backgroundColor: '#fef9ec', borderRadius: 3, paddingHorizontal: 6, paddingVertical: 3 }}>{note}</Text>
+                      : <Text style={{ fontSize: 7, color: C.textDim, marginTop: 4, fontStyle: 'italic' }}>No reason provided.</Text>
+                    }
+                  </View>
+                  <View style={{ width: 65, alignItems: 'flex-end' }}>
+                    <Text style={{ fontSize: 8.5, fontFamily: 'Helvetica-Bold', color: C.textDim }}>{fmt(r.estimated_monthly_savings)}</Text>
+                    <Text style={{ fontSize: 6.5, color: C.textDim }}>per month</Text>
+                  </View>
+                </View>
+              )
+            })}
+          </View>
+        )}
       </View>
       <PageFooter subscriptionId={subscriptionId} />
     </Page>
@@ -922,7 +1166,7 @@ function DataQualityPage({ resources, subscriptionId }) {
       <View style={s.inner}>
         <View style={s.sectionHeader}>
           <Text style={s.sectionTitle}>Data Quality — Diagnostics Not Enabled</Text>
-          <View style={{ ...s.sectionBadge, backgroundColor: '#451a03' }}>
+          <View style={{ ...s.sectionBadge, backgroundColor: '#fef3c7' }}>
             <Text style={s.sectionBadgeText}>{noData.length} RESOURCES</Text>
           </View>
         </View>
@@ -965,7 +1209,7 @@ function DataQualityPage({ resources, subscriptionId }) {
 
 // ── Resource Group Summary (P11) ───────────────────────────────────────────────
 
-function RGSummaryPage({ resources, kpi, subscriptionId }) {
+function RGSummaryPage({ resources, kpi, rgDescriptions = {}, subscriptionId }) {
   if (!resources?.length) return null
 
   const rgMap = {}
@@ -1005,7 +1249,12 @@ function RGSummaryPage({ resources, kpi, subscriptionId }) {
           return (
             <View key={i} style={{ marginBottom: 10 }}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 3 }}>
-                <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Bold', color: C.text, flex: 2 }}>{rg.name}</Text>
+                <View style={{ flex: 2 }}>
+                  <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Bold', color: C.text }}>{rg.name}</Text>
+                  {rgDescriptions[rg.name] && (
+                    <Text style={{ fontSize: 7.5, color: C.textMuted, marginTop: 1 }}>{rgDescriptions[rg.name]}</Text>
+                  )}
+                </View>
                 <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
                   <Text style={{ fontSize: 8, color: C.textMuted }}>{rg.count} resources</Text>
                   <Text style={{ fontSize: 8, color: C.textDim }}>{billPct}% of bill</Text>
@@ -1098,6 +1347,56 @@ function ChartsPage({ scoreDistribution, resourceTypes, kpi, subscriptionId }) {
             </View>
           </View>
         )}
+      </View>
+      <PageFooter subscriptionId={subscriptionId} />
+    </Page>
+  )
+}
+
+// ── Status Notes (all noted resources regardless of section) ──────────────────
+
+function StatusNotesPage({ notes = {}, resources = [], subscriptionId }) {
+  const entries = Object.entries(notes).filter(([, v]) => v)
+  if (!entries.length) return null
+
+  const resourceMap = {}
+  resources.forEach(r => { if (r.resource_id) resourceMap[r.resource_id.toLowerCase()] = r })
+
+  return (
+    <Page size="A4" style={s.page}>
+      <View style={s.inner}>
+        <View style={s.sectionHeader}>
+          <Text style={s.sectionTitle}>Status Notes</Text>
+          <View style={s.sectionBadge}><Text style={s.sectionBadgeText}>{entries.length} {entries.length === 1 ? 'NOTE' : 'NOTES'}</Text></View>
+        </View>
+        <Text style={{ fontSize: 8, color: C.textMuted, marginBottom: 16, lineHeight: 1.6 }}>
+          Notes added to explain why specific savings opportunities are not being actioned. These carry forward to each report until removed.
+        </Text>
+
+        {entries.map(([id, text], i) => {
+          const res = resourceMap[id]
+          return (
+            <View key={i} style={{ marginBottom: 10 }} wrap={false}>
+              <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10, backgroundColor: '#fef9ec', borderRadius: 6, padding: 12, borderLeft: '3px solid #d97706' }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Bold', color: C.text, marginBottom: 2 }}>
+                    {res?.resource_name || id.split('/').pop()}
+                  </Text>
+                  {res && (
+                    <Text style={{ fontSize: 7.5, color: C.textMuted, marginBottom: 6 }}>
+                      {humanType(res.resource_type)}  ·  {res.resource_group}
+                      {res.estimated_monthly_savings > 0 ? `  ·  ${fmt(res.estimated_monthly_savings)}/mo potential saving` : ''}
+                    </Text>
+                  )}
+                  <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 5 }}>
+                    <Text style={{ fontSize: 7, fontFamily: 'Helvetica-Bold', color: '#92400e', paddingTop: 1 }}>NOTE</Text>
+                    <Text style={{ fontSize: 8, color: '#78350f', flex: 1, lineHeight: 1.6 }}>{text}</Text>
+                  </View>
+                </View>
+              </View>
+            </View>
+          )
+        })}
       </View>
       <PageFooter subscriptionId={subscriptionId} />
     </Page>
@@ -1283,7 +1582,7 @@ function AICostPage({ resources, kpi, subscriptionId }) {
       <View style={s.inner}>
         <View style={s.sectionHeader}>
           <Text style={s.sectionTitle}>AI &amp; Cognitive Services Cost</Text>
-          <View style={{ ...s.sectionBadge, backgroundColor: '#312e81' }}>
+          <View style={{ ...s.sectionBadge, backgroundColor: '#ede9fe' }}>
             <Text style={s.sectionBadgeText}>{aiResources.length} SERVICES</Text>
           </View>
         </View>
@@ -1292,7 +1591,7 @@ function AICostPage({ resources, kpi, subscriptionId }) {
           {kpis.map((k, i) => (
             <View key={i} style={{ ...s.kpiCard, borderTopColor: k.color }}>
               <Text style={s.kpiLabel}>{k.label}</Text>
-              <Text style={{ ...s.kpiValue, fontSize: 18, color: C.white }}>{k.value}</Text>
+              <Text style={{ ...s.kpiValue, fontSize: 18, color: C.text }}>{k.value}</Text>
               <Text style={s.kpiSub}>{k.sub}</Text>
             </View>
           ))}
@@ -1384,7 +1683,7 @@ function AICostPage({ resources, kpi, subscriptionId }) {
 
 // ── PDF Document ───────────────────────────────────────────────────────────────
 
-function ReportDocument({ data }) {
+function ReportDocument({ data, notes = {}, rgDescriptions = {}, actionStatuses = {}, logoDataUrl = null }) {
   const isAllSubs   = !data.active_subscription_id
   const activeSub   = isAllSubs
     ? null
@@ -1400,22 +1699,24 @@ function ReportDocument({ data }) {
       author="Azure Cost Optimizer"
       subject={`Cost analysis for ${subName || subId || 'all subscriptions'}`}
     >
-      <CoverPage        kpi={data.kpi} subscriptionId={subId} subscriptionName={subName} generatedAt={generatedAt} />
+      <CoverPage        kpi={data.kpi} subscriptionId={subId} subscriptionName={subName} generatedAt={generatedAt} logoDataUrl={logoDataUrl} />
       {isAllSubs && (data.subscriptions?.length ?? 0) > 1 && (
         <SubscriptionBreakdownPage subscriptions={data.subscriptions} subscriptionId={subLabel} />
       )}
-      <SummaryPage      kpi={data.kpi} tagCompliancePct={data.tag_compliance_pct} totalCarbon={data.total_carbon_kg} subscriptionId={subLabel} />
+      <SummaryPage      kpi={data.kpi} tagCompliancePct={data.tag_compliance_pct} totalCarbon={data.total_carbon_kg} carbonOnpremKg={data.carbon_onprem_kg || 0} subscriptionId={subLabel} />
+      <SpendTrendPage   monthlySpendTotals={data.monthly_spend_totals || []} carbonCloudKg={data.total_carbon_kg || 0} carbonOnpremKg={data.carbon_onprem_kg || 0} subscriptionId={subLabel} />
       {data.ai_narrative && <NarrativePage narrative={data.ai_narrative} subscriptionId={subLabel} />}
       <ChartsPage       scoreDistribution={data.score_distribution} resourceTypes={data.resource_type_summary} kpi={data.kpi} subscriptionId={subLabel} />
       <AICostPage       resources={data.resources} kpi={data.kpi} subscriptionId={subLabel} />
-      <ActionPlanPage   savings={data.savings_recommendations} resources={data.resources} subscriptionId={subLabel} />
+      <ActionPlanPage   savings={data.savings_recommendations} resources={data.resources} notes={notes} actionStatuses={actionStatuses} subscriptionId={subLabel} />
       <SavingsPage      savings={data.savings_recommendations} resources={data.resources} subscriptionId={subLabel} />
-      <RGSummaryPage    resources={data.resources} kpi={data.kpi} subscriptionId={subLabel} />
+      <RGSummaryPage    resources={data.resources} kpi={data.kpi} rgDescriptions={rgDescriptions} subscriptionId={subLabel} />
       <ReservationsPage resources={data.resources} activeReservations={data.active_reservations} subscriptionId={subLabel} />
-      <RightSizePage    rightsize={data.rightsize_opportunities} subscriptionId={subLabel} />
+      <RightSizePage    rightsize={data.rightsize_opportunities} notes={notes} subscriptionId={subLabel} />
       <OrphansPage      orphans={data.orphans} resources={data.resources} subscriptionId={subLabel} />
       <CostByTypePage   resourceTypes={data.resource_type_summary} kpi={data.kpi} subscriptionId={subLabel} />
       <DataQualityPage  resources={data.resources} subscriptionId={subLabel} />
+      <StatusNotesPage  notes={notes} resources={data.resources} subscriptionId={subLabel} />
       <GlossaryPage     subscriptionId={subLabel} />
     </Document>
   )
@@ -1432,7 +1733,14 @@ export default function ExportPDFButton({ data }) {
     setGenerating(true)
     setExportError(null)
     try {
-      const blob     = await pdf(<ReportDocument data={data} />).toBlob()
+      const rawNotes   = await api.getNotes().catch(() => ({}))
+      const notes      = Object.fromEntries(Object.entries(rawNotes).map(([k, v]) => [k.toLowerCase(), v]))
+      const manualDesc = await api.getRgDescriptions().catch(() => ({}))
+      const rgDescriptions = { ...(data.rg_descriptions || {}), ...manualDesc }
+      const rawStatuses = await api.getActionStatuses().catch(() => ({}))
+      const actionStatuses = Object.fromEntries(Object.entries(rawStatuses).map(([k, v]) => [k.toLowerCase(), v]))
+      const { data_url: logoDataUrl } = await api.getLogo().catch(() => ({}))
+      const blob     = await pdf(<ReportDocument data={data} notes={notes} rgDescriptions={rgDescriptions} actionStatuses={actionStatuses} logoDataUrl={logoDataUrl || null} />).toBlob()
       const url      = URL.createObjectURL(blob)
       const a        = document.createElement('a')
       const isAllSubs = !data.active_subscription_id

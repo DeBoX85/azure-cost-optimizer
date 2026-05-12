@@ -8,6 +8,16 @@ backend/.env.local
 backend/.env.*.local
 backend/settings.json
 
+# User annotations — personal data, never commit
+backend/notes.json
+backend/rg_descriptions.json
+backend/action_statuses.json
+# User-supplied report logo — place logo.png/jpg/svg here to brand PDF exports
+backend/logo.png
+backend/logo.jpg
+backend/logo.jpeg
+backend/logo.svg
+
 # Private keys & certificates — never commit
 *.pem
 *.key
@@ -37,6 +47,9 @@ Screenshot*.png
 *screenshot*.png
 # But allow docs/screenshots/ for README assets
 !docs/screenshots/*.png
+
+# Company-specific logo (never commit — use Settings > Branding to upload your own)
+frontend/src/assets/impax-logo.png
 
 # Internal development notes (backlog, session history)
 IMPROVEMENTS.md

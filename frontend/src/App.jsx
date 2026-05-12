@@ -634,6 +634,7 @@ function AppInner() {
           resources={data?.resources ?? []}
           totalDailyCm={data?.total_daily_cm ?? []}
           totalDailyPm={data?.total_daily_pm ?? []}
+          monthlySpendTotals={data?.monthly_spend_totals ?? []}
         />
 
         {/* Charts Row */}
@@ -676,6 +677,7 @@ function AppInner() {
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
           <WasteByRG
             resources={data?.resources ?? []}
+            rgDescriptions={data?.rg_descriptions ?? {}}
             onBarClick={(filter) => filter ? handleTableFilter(filter) : setTableFilter(null)}
           />
           <TagCompliance

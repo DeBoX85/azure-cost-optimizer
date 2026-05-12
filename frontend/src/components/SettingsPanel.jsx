@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react'
-import { X, Settings, Eye, EyeOff, CheckCircle, AlertCircle, Loader, FlaskConical, Info } from 'lucide-react'
+import React, { useState, useEffect, useRef } from 'react'
+import { X, Settings, Eye, EyeOff, CheckCircle, AlertCircle, Loader, FlaskConical, Info, Upload, Trash2 } from 'lucide-react'
 import clsx from 'clsx'
 import { api } from '../api/client'
 import ScopePicker from './ScopePicker'
@@ -71,6 +71,96 @@ const PROVIDER_OPTIONS = [
   { value: 'azure_openai', label: 'Azure OpenAI', desc: 'Uses your Azure OpenAI resource — credentials stay inside your tenant' },
   { value: 'none',         label: 'Disabled',     desc: 'Rule-based scoring only, no AI narrative or false-positive detection' },
 ]
+
+function BrandingTab() {
+  const [logoUrl, setLogoUrl]       = useState(null)
+  const [uploading, setUploading]   = useState(false)
+  const [msg, setMsg]               = useState(null)
+  const fileRef                     = useRef()
+
+  useEffect(() => {
+    api.getLogo().then(r => setLogoUrl(r.data_url || null)).catch(() => {})
+  }, [])
+
+  function handleFile(e) {
+    const file = e.target.files[0]
+    if (!file) return
+    if (!file.type.startsWith('image/')) { setMsg({ type: 'error', msg: 'Please select an image file (PNG, JPG, SVG).' }); return }
+    if (file.size > 2 * 1024 * 1024) { setMsg({ type: 'error', msg: 'Image must be under 2 MB.' }); return }
+    const reader = new FileReader()
+    reader.onload = async (ev) => {
+      setUploading(true)
+      setMsg(null)
+      try {
+        const res = await api.saveLogo(ev.target.result)
+        if (res.ok) { setLogoUrl(ev.target.result); setMsg({ type: 'success', msg: 'Logo saved. It will appear on the next PDF export.' }) }
+        else setMsg({ type: 'error', msg: res.error || 'Save failed.' })
+      } catch { setMsg({ type: 'error', msg: 'Upload failed.' }) }
+      finally { setUploading(false) }
+    }
+    reader.readAsDataURL(file)
+    e.target.value = ''
+  }
+
+  async function handleRemove() {
+    setUploading(true)
+    setMsg(null)
+    try {
+      await api.deleteLogo()
+      setLogoUrl(null)
+      setMsg({ type: 'success', msg: 'Logo removed. PDFs will show the default tool icon.' })
+    } catch { setMsg({ type: 'error', msg: 'Remove failed.' }) }
+    finally { setUploading(false) }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-lg border border-gray-700/60 bg-gray-800/30 p-4 space-y-2">
+        <div className="flex items-center gap-2">
+          <Info size={13} className="text-blue-400 shrink-0" />
+          <p className="text-xs font-semibold text-gray-300">PDF report logo</p>
+        </div>
+        <p className="text-xs text-gray-400 leading-relaxed">
+          Your company logo appears in the top-left corner of every exported PDF report.
+          PNG, JPG, or SVG — max 2 MB. Leave empty to use the default Azure Cost Optimizer icon.
+        </p>
+        <p className="text-xs text-gray-500 leading-relaxed font-mono bg-gray-900/50 rounded px-2 py-1.5 mt-1">
+          Tip: you can also just drop a <span className="text-blue-400">logo.png</span> file into the <span className="text-blue-400">backend/</span> folder — the app picks it up automatically on the next export.
+        </p>
+      </div>
+
+      {logoUrl ? (
+        <div className="rounded-lg border border-gray-700 bg-gray-800/50 p-4 flex items-center gap-4">
+          <img src={logoUrl} alt="Current logo" className="h-10 max-w-[140px] object-contain rounded" />
+          <div className="flex-1">
+            <p className="text-xs text-gray-300 font-medium">Current logo</p>
+            <p className="text-xs text-gray-500">This logo appears on PDF exports.</p>
+          </div>
+          <button onClick={handleRemove} disabled={uploading}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-800/50 bg-red-900/20 text-xs text-red-400 hover:bg-red-900/40 transition-colors disabled:opacity-40">
+            <Trash2 size={12} /> Remove
+          </button>
+        </div>
+      ) : (
+        <div className="rounded-lg border border-dashed border-gray-600 bg-gray-800/20 p-6 flex flex-col items-center gap-2 text-center">
+          <Upload size={20} className="text-gray-500" />
+          <p className="text-xs text-gray-400">No logo set — default tool icon will be used</p>
+        </div>
+      )}
+
+      <div>
+        <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
+        <button onClick={() => fileRef.current?.click()} disabled={uploading}
+          className="btn-primary flex items-center gap-2 text-sm disabled:opacity-40">
+          {uploading ? <Loader size={14} className="animate-spin" /> : <Upload size={14} />}
+          {logoUrl ? 'Replace logo' : 'Upload logo'}
+        </button>
+      </div>
+
+      {msg && <StatusMessage {...msg} />}
+    </div>
+  )
+}
 
 export default function SettingsPanel({ open, onClose, onSaved, subscriptions = [], onDisconnect }) {
   const [tab,              setTab]              = useState('azure')
@@ -214,7 +304,7 @@ export default function SettingsPanel({ open, onClose, onSaved, subscriptions = 
 
         {/* Tabs */}
         <div className="flex border-b border-gray-800 px-4">
-          {[['azure','Azure'], ['ai','AI Provider'], ['scoring','Scoring'], ['general','General']].map(([k, l]) => (
+          {[['azure','Azure'], ['ai','AI Provider'], ['scoring','Scoring'], ['general','General'], ['branding','Branding']].map(([k, l]) => (
             <Tab key={k} label={l} active={tab === k} onClick={() => setTab(k)} />
           ))}
         </div>
@@ -515,16 +605,21 @@ export default function SettingsPanel({ open, onClose, onSaved, subscriptions = 
             </>
           )}
 
+          {/* ── Branding tab ── */}
+          {tab === 'branding' && <BrandingTab />}
+
           {status && <StatusMessage {...status} />}
         </div>
 
         {/* Footer */}
         <div className="px-5 py-4 border-t border-gray-800 flex gap-3 justify-end">
           <button onClick={onClose} className="btn-ghost text-sm">Cancel</button>
-          <button onClick={save} disabled={loading} className="btn-primary flex items-center gap-2 text-sm">
-            {loading && <Loader size={14} className="animate-spin" />}
-            Save Settings
-          </button>
+          {tab !== 'branding' && (
+            <button onClick={save} disabled={loading} className="btn-primary flex items-center gap-2 text-sm">
+              {loading && <Loader size={14} className="animate-spin" />}
+              Save Settings
+            </button>
+          )}
         </div>
       </div>
     </div>

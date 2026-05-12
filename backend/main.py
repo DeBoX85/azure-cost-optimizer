@@ -31,17 +31,17 @@ from models.schemas import (
     RightSizeOpportunity, SavingsRecommendation, ScoreDistribution,
     ScoreLabel, SubscriptionSummary, TrendDirection,
 )
-from services.cost_service     import get_three_month_costs, get_daily_costs, get_monthly_cost_history, get_total_daily_costs, get_reservation_covered_resource_ids
+from services.cost_service     import get_three_month_costs, get_daily_costs, get_monthly_cost_history, get_total_daily_costs, get_reservation_covered_resource_ids, get_subscription_monthly_totals
 from services.metrics_service  import get_resource_metrics
 from services.resource_service import list_all_resources, find_orphans, get_app_service_plan_links, get_vm_power_states, get_resource_locks, get_app_insights_links, get_vm_attachments, get_rbac_signals, get_reservation_coverage, get_reservation_recommendations, get_private_endpoint_targets, get_sql_replica_ids, get_app_service_details, get_backup_protected_ids, get_openai_deployments
 from services.storage_access_service  import get_storage_access_signals
 from services.keyvault_access_service import get_keyvault_signals
 from services.advisor_service  import get_advisor_recommendations
-from services.ai_service       import get_ai_verdicts, get_active_provider, get_ai_narrative
+from services.ai_service       import get_ai_verdicts, get_active_provider, get_ai_narrative, generate_rg_descriptions
 from services.scoring_service       import score_resource, estimate_savings, is_infrastructure_resource, get_safe_action_steps
 from services.observability_service import get_data_confidence, should_suppress_idle_penalty
 from services.activity_service import get_subscription_activity
-from services.carbon_service   import estimate_carbon, carbon_equivalents
+from services.carbon_service   import estimate_carbon, carbon_equivalents, onprem_equivalent_kg
 from services.rightsize_service import get_rightsize_recommendations, RightSizeRec
 import services.settings_service as settings_svc
 
@@ -360,22 +360,27 @@ async def _build_dashboard(
 
     await report("resources", f"Listing resources across {len(sub_ids)} subscription(s)…", 5)
 
-    resources_task      = loop.run_in_executor(executor, partial(list_all_resources, sub_ids))
-    costs_task          = loop.run_in_executor(executor, partial(get_three_month_costs, sub_ids))
-    advisor_task        = loop.run_in_executor(executor, partial(get_advisor_recommendations, sub_ids))
-    daily_task          = loop.run_in_executor(executor, partial(get_daily_costs, 60, sub_ids))
-    monthly_hist_task   = loop.run_in_executor(executor, partial(get_monthly_cost_history, 6, sub_ids))
-    total_daily_task    = loop.run_in_executor(executor, partial(get_total_daily_costs, sub_ids))
-    sub_names_task      = loop.run_in_executor(executor, partial(_fetch_subscription_names, sub_ids))
+    resources_task          = loop.run_in_executor(executor, partial(list_all_resources, sub_ids))
+    costs_task              = loop.run_in_executor(executor, partial(get_three_month_costs, sub_ids))
+    advisor_task            = loop.run_in_executor(executor, partial(get_advisor_recommendations, sub_ids))
+    daily_task              = loop.run_in_executor(executor, partial(get_daily_costs, 60, sub_ids))
+    monthly_hist_task       = loop.run_in_executor(executor, partial(get_monthly_cost_history, 6, sub_ids))
+    total_daily_task        = loop.run_in_executor(executor, partial(get_total_daily_costs, sub_ids))
+    sub_names_task          = loop.run_in_executor(executor, partial(_fetch_subscription_names, sub_ids))
+    sub_monthly_task        = loop.run_in_executor(executor, partial(get_subscription_monthly_totals, 6, sub_ids))
 
-    await report("costs", f"Fetching 3 months of cost data across {len(sub_ids)} subscription(s)…", 15)
+    await report("costs", f"Fetching 6 months of cost data across {len(sub_ids)} subscription(s)…", 15)
 
-    resources, (curr_costs, prev_costs, prev2_costs, cost_fetch_error), advisor_map, daily_costs_raw, monthly_hist_raw, (total_daily_cm, total_daily_pm), sub_names = await asyncio.gather(
-        resources_task, costs_task, advisor_task, daily_task, monthly_hist_task, total_daily_task, sub_names_task
+    resources, (curr_costs, prev_costs, prev2_costs, cost_fetch_error), advisor_map, daily_costs_raw, monthly_hist_raw, (total_daily_cm, total_daily_pm), sub_names, sub_monthly_totals = await asyncio.gather(
+        resources_task, costs_task, advisor_task, daily_task, monthly_hist_task, total_daily_task, sub_names_task, sub_monthly_task
     )
 
     # Credentials successfully used — reset the inactivity timer (SEC1)
     settings_svc.touch_credential_use()
+
+    # Subscription-level monthly totals for the 6-month chart.
+    # Uses a no-grouping query so deleted/moved resources are included.
+    monthly_spend_totals: list[float] = sub_monthly_totals
 
     # Apply resource group filter if set
     if resource_group_filter:
@@ -799,12 +804,13 @@ async def _build_dashboard(
             workload_pattern = "bursty"      # big spikes vs average → scheduled job / event-driven
         elif trend == TrendDirection.FALLING and util_pct is not None and util_pct < 20:
             workload_pattern = "declining"   # usage trending down → optimization candidate
-        elif (util_pct is None or util_pct < 3) and not has_activity:
-            workload_pattern = "inactive"    # nothing running
+        elif util_pct is not None and util_pct < 3 and not has_activity:
+            workload_pattern = "inactive"    # measured low activity — confirmed idle
         elif util_pct is not None and util_pct < 20:
             workload_pattern = "steady_low"  # consistently low but something running
         elif util_pct is not None:
             workload_pattern = "normal"
+        # util_pct is None and not is_orphan → no metrics available, leave as None (don't show INACTIVE badge)
 
         # ── S22: "Why NOT waste" explanation ─────────────────────────────────
         # Surfaces the highest-confidence reason a resource was kept, so users
@@ -1298,14 +1304,37 @@ async def _build_dashboard(
     # Use pre-cost-floor resources so RGs with only cheap resources still appear in the dropdown
     rg_list = sorted({r["resource_group"] for r in resources if r.get("resource_group")})
 
-    # ── AI Narrative summary ────────────────────────────────────────────────
+    # ── AI Narrative summary + RG descriptions ─────────────────────────────
     ai_narrative: Optional[str] = None
+    ai_rg_descriptions: dict = {}
     if ai_enabled:
         await report("narrative", "Generating AI subscription summary…", 96)
-        ai_narrative = await loop.run_in_executor(
-            executor,
-            partial(get_ai_narrative, resource_metrics_list, kpi),
+        # Build compact RG summaries for description generation
+        _rg_map: dict = {}
+        for r in resource_metrics_list:
+            rg = getattr(r, "resource_group", "") or "Unknown"
+            if rg not in _rg_map:
+                _rg_map[rg] = {"name": rg, "types": [], "cost": 0.0}
+            rtype = (getattr(r, "resource_type", "") or "").split("/")[-1]
+            if rtype and rtype not in _rg_map[rg]["types"]:
+                _rg_map[rg]["types"].append(rtype)
+            _rg_map[rg]["cost"] += getattr(r, "cost_current_month", 0.0)
+        rg_summaries = list(_rg_map.values())
+
+        ai_narrative, ai_rg_descriptions = await asyncio.gather(
+            loop.run_in_executor(executor, partial(get_ai_narrative, resource_metrics_list, kpi)),
+            loop.run_in_executor(executor, partial(generate_rg_descriptions, rg_summaries)),
         )
+
+    # Merge AI descriptions with manual overrides (overrides win)
+    _RG_DESC_FILE = pathlib.Path(__file__).parent / "rg_descriptions.json"
+    _manual_rg_desc: dict = {}
+    if _RG_DESC_FILE.exists():
+        try:
+            _manual_rg_desc = json.loads(_RG_DESC_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    rg_descriptions = {**ai_rg_descriptions, **_manual_rg_desc}
 
     # Detect when cost data returned nothing — surface a visible warning
     cost_data_warning: Optional[str] = None
@@ -1401,6 +1430,7 @@ async def _build_dashboard(
         ai_narrative=ai_narrative,
         demo_mode=False,
         total_carbon_kg=round(total_carbon, 1),
+        carbon_onprem_kg=onprem_equivalent_kg(total_carbon),
         tag_compliance_pct=tag_pct, total_untagged=untagged,
         cost_anomalies=cost_anomalies, rightsize_opportunities=rightsize_opps,
         subscriptions=subscription_list,
@@ -1414,6 +1444,8 @@ async def _build_dashboard(
         cost_data_warning=cost_data_warning,
         total_daily_cm=total_daily_cm,
         total_daily_pm=total_daily_pm,
+        monthly_spend_totals=monthly_spend_totals,
+        rg_descriptions=rg_descriptions,
     )
 
 
@@ -1807,6 +1839,157 @@ async def openai_deployments(subscription_id: str, resource_group: str, account_
     return get_openai_deployments(credential, subscription_id, resource_group, account_name)
 
 
+# ── Resource group description overrides ──────────────────────────────────────
+
+_RG_DESC_FILE = pathlib.Path(__file__).parent / "rg_descriptions.json"
+
+@app.get("/api/rg-descriptions")
+async def get_rg_descriptions():
+    if _RG_DESC_FILE.exists():
+        try:
+            return json.loads(_RG_DESC_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    return {}
+
+@app.post("/api/rg-descriptions")
+async def save_rg_description(body: dict):
+    rg_name = (body.get("rg_name") or "").strip()
+    text    = (body.get("text") or "").strip()
+    if not rg_name:
+        return {"ok": False, "error": "rg_name required"}
+    data: dict = {}
+    if _RG_DESC_FILE.exists():
+        try:
+            data = json.loads(_RG_DESC_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    if text:
+        data[rg_name] = text
+    else:
+        data.pop(rg_name, None)
+    _RG_DESC_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    return {"ok": True}
+
+
+# ── Resource notes ─────────────────────────────────────────────────────────────
+
+_NOTES_FILE = pathlib.Path(__file__).parent / "notes.json"
+
+def _load_notes() -> dict:
+    if _NOTES_FILE.exists():
+        try:
+            return json.loads(_NOTES_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+    return {}
+
+def _save_notes(notes: dict) -> None:
+    _NOTES_FILE.write_text(json.dumps(notes, indent=2, ensure_ascii=False), encoding="utf-8")
+
+@app.get("/api/notes")
+async def get_notes():
+    return _load_notes()
+
+@app.post("/api/notes")
+async def upsert_note(body: dict):
+    resource_id = (body.get("resource_id") or "").strip()
+    text        = (body.get("text") or "").strip()
+    if not resource_id:
+        return {"ok": False, "error": "resource_id required"}
+    notes = _load_notes()
+    if text:
+        notes[resource_id] = text
+    else:
+        notes.pop(resource_id, None)
+    _save_notes(notes)
+    return {"ok": True}
+
+
+# ── Action statuses ────────────────────────────────────────────────────────────
+_ACTION_STATUS_FILE = pathlib.Path(__file__).parent / "action_statuses.json"
+
+def _load_action_statuses() -> dict:
+    if _ACTION_STATUS_FILE.exists():
+        try:
+            return json.loads(_ACTION_STATUS_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+    return {}
+
+def _save_action_statuses(statuses: dict) -> None:
+    _ACTION_STATUS_FILE.write_text(json.dumps(statuses, indent=2, ensure_ascii=False), encoding="utf-8")
+
+@app.get("/api/action-statuses")
+async def get_action_statuses():
+    return _load_action_statuses()
+
+@app.post("/api/action-statuses")
+async def save_action_status(body: dict):
+    resource_id = (body.get("resource_id") or "").strip().lower()
+    status      = (body.get("status") or "").strip()  # "done" | "snoozed" | "wontfix" | "" to clear
+    if not resource_id:
+        return {"ok": False, "error": "resource_id required"}
+    statuses = _load_action_statuses()
+    if status:
+        statuses[resource_id] = status
+    else:
+        statuses.pop(resource_id, None)
+    _save_action_statuses(statuses)
+    return {"ok": True}
+
+
+# ── Report logo (user-supplied branding) ───────────────────────────────────────
+# Community usage: drop any image file named logo.png / logo.jpg / logo.svg
+# into the backend/ directory and it will appear on every PDF export automatically.
+_LOGO_CANDIDATES = [
+    pathlib.Path(__file__).parent / "logo.png",
+    pathlib.Path(__file__).parent / "logo.jpg",
+    pathlib.Path(__file__).parent / "logo.jpeg",
+    pathlib.Path(__file__).parent / "logo.svg",
+]
+
+def _find_logo_file() -> pathlib.Path | None:
+    return next((p for p in _LOGO_CANDIDATES if p.exists()), None)
+
+def _logo_mime(path: pathlib.Path) -> str:
+    ext = path.suffix.lower()
+    return {"png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".svg": "image/svg+xml"}.get(ext, "image/png")
+
+@app.get("/api/logo")
+async def get_logo():
+    logo = _find_logo_file()
+    if logo:
+        import base64
+        mime = _logo_mime(logo)
+        b64  = base64.b64encode(logo.read_bytes()).decode()
+        return {"data_url": f"data:{mime};base64,{b64}"}
+    return {"data_url": None}
+
+@app.post("/api/logo")
+async def save_logo(body: dict):
+    import base64 as _b64
+    data_url = (body.get("data_url") or "").strip()
+    if not data_url.startswith("data:image/"):
+        return {"ok": False, "error": "Invalid image data"}
+    # Determine extension from MIME type in data URL
+    mime = data_url.split(";")[0].split(":")[1]
+    ext  = {"image/png": "png", "image/jpeg": "jpg", "image/svg+xml": "svg"}.get(mime, "png")
+    raw  = _b64.b64decode(data_url.split(",", 1)[1])
+    if len(raw) > 2 * 1024 * 1024:
+        return {"ok": False, "error": "Logo too large (max 2 MB)"}
+    # Remove any existing logo candidates first
+    for p in _LOGO_CANDIDATES:
+        p.unlink(missing_ok=True)
+    dest = pathlib.Path(__file__).parent / f"logo.{ext}"
+    dest.write_bytes(raw)
+    return {"ok": True}
+
+@app.delete("/api/logo")
+async def delete_logo():
+    for p in _LOGO_CANDIDATES:
+        p.unlink(missing_ok=True)
+    return {"ok": True}
 
 
 # ── Serve built React frontend ─────────────────────────────────────────────────

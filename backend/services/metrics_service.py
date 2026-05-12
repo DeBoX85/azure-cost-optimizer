@@ -68,6 +68,12 @@ METRIC_MAP: Dict[str, List[Tuple[str, str]]] = {
         ("dtu_consumption_percent", "Average"),
         ("storage_percent",         "Average"),
     ],
+    "microsoft.sql/managedinstances": [
+        ("avg_cpu_percent",         "Average"),
+        ("storage_space_used_mb",   "Average"),
+        ("io_requests",             "Total"),
+        ("connection_failed",       "Total"),
+    ],
     "microsoft.dbformysql/servers": [
         ("cpu_percent",     "Average"),
         ("memory_percent",  "Average"),

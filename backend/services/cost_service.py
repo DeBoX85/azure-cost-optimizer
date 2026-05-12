@@ -351,6 +351,35 @@ def get_monthly_cost_history(
     }
 
 
+def get_subscription_monthly_totals(
+    months: int = 6,
+    subscription_ids: Optional[List[str]] = None,
+) -> List[float]:
+    """
+    Returns [cost_oldest, ..., cost_newest] covering the last N months as subscription-level
+    totals. Uses one _query_costs call per month (same proven path as get_three_month_costs)
+    so deleted/moved resources are included in historical months.
+    """
+    credential = get_credential()
+    sub_ids    = subscription_ids or get_subscription_ids()
+    client     = CostManagementClient(credential)
+
+    now = datetime.now(tz=timezone.utc)
+    totals: List[float] = []
+
+    for i in range(months - 1, -1, -1):
+        dt = now - relativedelta(months=i)
+        start, end = _month_range(dt.year, dt.month)
+        month_total = 0.0
+        for sub_id in sub_ids:
+            scope = f"/subscriptions/{sub_id}"
+            result, _ = _query_costs(client, scope, start, end)
+            month_total += sum(result.values())
+        totals.append(round(month_total, 2))
+
+    return totals
+
+
 def get_total_daily_costs(
     subscription_ids: Optional[List[str]] = None,
 ) -> Tuple[List[float], List[float]]:

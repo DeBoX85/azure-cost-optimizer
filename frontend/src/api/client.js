@@ -32,6 +32,23 @@ export const api = {
   signOut:               ()               => request('/auth/sign-out', { method: 'POST', body: '{}' }),
   getResourceGroups:     (subId = '')   => request(`/settings/resource-groups${subId ? `?subscription_id=${subId}` : ''}`),
 
+  // RG description overrides
+  getRgDescriptions: ()             => request('/rg-descriptions'),
+  saveRgDescription: (rgName, text) => request('/rg-descriptions', { method: 'POST', body: JSON.stringify({ rg_name: rgName, text }) }),
+
+  // Notes — per-resource status notes (persisted to backend notes.json)
+  getNotes:   ()              => request('/notes'),
+  upsertNote: (resourceId, text) => request('/notes', { method: 'POST', body: JSON.stringify({ resource_id: resourceId, text }) }),
+
+  // Action statuses — done / snoozed / wontfix (persisted to backend action_statuses.json)
+  getActionStatuses: () => request('/action-statuses'),
+  saveActionStatus:  (resourceId, status) => request('/action-statuses', { method: 'POST', body: JSON.stringify({ resource_id: resourceId, status }) }),
+
+  // Report logo branding
+  getLogo:    ()          => request('/logo'),
+  saveLogo:   (dataUrl)   => request('/logo', { method: 'POST', body: JSON.stringify({ data_url: dataUrl }) }),
+  deleteLogo: ()          => request('/logo', { method: 'DELETE' }),
+
   // SSE streaming dashboard — accepts optional URLSearchParams
   streamDashboard(onEvent, onDone, onError, params = null) {
     const qs  = params && params.toString() ? `?${params.toString()}` : ''

@@ -1,6 +1,7 @@
-import React, { useMemo } from 'react'
+import React, { useMemo, useState } from 'react'
 import {
   LineChart, Line,
+  BarChart, Bar, Cell,
   XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, ReferenceLine,
 } from 'recharts'
@@ -222,9 +223,33 @@ function TopMovers({ resources }) {
   )
 }
 
+// ── Monthly helpers ────────────────────────────────────────────────────────────
+
+function buildMonthlyLabels(count = 6) {
+  const labels = []
+  for (let i = count - 1; i >= 0; i--) {
+    const d = new Date()
+    d.setDate(1)
+    d.setMonth(d.getMonth() - i)
+    labels.push(d.toLocaleString('en-US', { month: 'short', year: '2-digit' }))
+  }
+  return labels
+}
+
+function MonthlyTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null
+  return (
+    <div className="bg-gray-900 border border-gray-700 rounded-xl p-3 shadow-2xl text-xs">
+      <p className="text-gray-400 mb-1">{label}</p>
+      <p className="text-white font-bold">{fmtFull(payload[0].value)}</p>
+    </div>
+  )
+}
+
 // ── Main component ─────────────────────────────────────────────────────────────
 
-export default function SpendTrend({ resources = [], totalDailyCm = [], totalDailyPm = [] }) {
+export default function SpendTrend({ resources = [], totalDailyCm = [], totalDailyPm = [], monthlySpendTotals = [] }) {
+  const [view, setView] = useState('daily') // 'daily' | '6m'
   const currMonth = monthName(0)
   const prevMonth = monthName(-1)
 
@@ -232,6 +257,21 @@ export default function SpendTrend({ resources = [], totalDailyCm = [], totalDai
     () => buildSeries(resources, totalDailyCm, totalDailyPm),
     [resources, totalDailyCm, totalDailyPm],
   )
+
+  const monthlyLabels = useMemo(() => buildMonthlyLabels(monthlySpendTotals.length || 6), [monthlySpendTotals.length])
+  const monthlyChartData = useMemo(() =>
+    monthlyLabels.map((label, i) => ({ label, value: monthlySpendTotals[i] ?? 0 })),
+  [monthlyLabels, monthlySpendTotals])
+
+  const monthlyStats = useMemo(() => {
+    if (!monthlySpendTotals.length) return null
+    const total   = monthlySpendTotals.reduce((s, v) => s + v, 0)
+    const avg     = total / monthlySpendTotals.length
+    const first   = monthlySpendTotals[0] || 0
+    const last    = monthlySpendTotals[monthlySpendTotals.length - 1] || 0
+    const trendPct = first > 0 ? ((last - first) / first) * 100 : 0
+    return { total, avg, trendPct, first, last }
+  }, [monthlySpendTotals])
 
   const stats = useMemo(() => {
     if (!data.length) return null
@@ -263,138 +303,188 @@ export default function SpendTrend({ resources = [], totalDailyCm = [], totalDai
     <div className="card">
       {/* Header */}
       <div className="flex items-start justify-between mb-4 gap-4 flex-wrap">
-        <div>
-          <h2 className="text-sm font-semibold text-gray-300 uppercase tracking-wider">
-            {noCurrData
-              ? `30-Day Spend Trend — ${prevMonth}`
-              : `Daily Spend — ${currMonth} vs ${prevMonth}`}
-          </h2>
-          <p className="text-xs text-gray-600 mt-0.5">
-            {noCurrData
-              ? `${currMonth} billing data not yet settled — showing ${prevMonth}`
-              : 'Daily total cost across all resources'}
-          </p>
+        <div className="flex items-center gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-300 uppercase tracking-wider">
+              {view === '6m'
+                ? '6-Month Spend History'
+                : noCurrData
+                  ? `30-Day Spend Trend — ${prevMonth}`
+                  : `Daily Spend — ${currMonth} vs ${prevMonth}`}
+            </h2>
+            <p className="text-xs text-gray-600 mt-0.5">
+              {view === '6m'
+                ? 'Total Azure spend by calendar month'
+                : noCurrData
+                  ? `${currMonth} billing data not yet settled — showing ${prevMonth}`
+                  : 'Daily total cost across all resources'}
+            </p>
+          </div>
+          {/* View toggle */}
+          {monthlySpendTotals.length > 0 && (
+            <div className="flex rounded-md overflow-hidden border border-gray-700 text-xs shrink-0">
+              <button
+                onClick={() => setView('daily')}
+                className={clsx('px-2.5 py-1 transition-colors', view === 'daily' ? 'bg-blue-600 text-white' : 'bg-gray-900 text-gray-500 hover:text-gray-300')}
+              >Daily</button>
+              <button
+                onClick={() => setView('6m')}
+                className={clsx('px-2.5 py-1 transition-colors', view === '6m' ? 'bg-blue-600 text-white' : 'bg-gray-900 text-gray-500 hover:text-gray-300')}
+              >6M</button>
+            </div>
+          )}
         </div>
 
         {/* Summary pills */}
         <div className="flex flex-wrap gap-3 text-xs">
-          {!noCurrData && (
+          {view === '6m' && monthlyStats ? (
             <>
               <div className="flex flex-col items-end">
-                <span className="text-gray-600">{currMonth} MTD</span>
-                <span className="font-bold text-white tabular-nums">{fmtShort(stats.mtdTotal)}</span>
+                <span className="text-gray-600">6-month total</span>
+                <span className="font-bold text-white tabular-nums">{fmtShort(monthlyStats.total)}</span>
               </div>
               <div className="w-px bg-gray-800" />
-            </>
-          )}
-          <div className="flex flex-col items-end">
-            <span className="text-gray-600">{prevMonth} total</span>
-            <span className="font-bold text-white tabular-nums">{fmtShort(stats.prevTotal)}</span>
-          </div>
-          {!noCurrData && (
-            <>
+              <div className="flex flex-col items-end">
+                <span className="text-gray-600">Monthly avg</span>
+                <span className="font-bold text-white tabular-nums">{fmtShort(monthlyStats.avg)}</span>
+              </div>
               <div className="w-px bg-gray-800" />
               <div className="flex flex-col items-end">
-                <span className="text-gray-600">MTD vs same period</span>
+                <span className="text-gray-600">Trend (6 months)</span>
                 <span className={clsx(
                   'font-bold tabular-nums flex items-center gap-1',
-                  stats.mtdPct > 5  ? 'text-red-400' :
-                  stats.mtdPct < -5 ? 'text-green-400' : 'text-gray-400',
+                  monthlyStats.trendPct > 5  ? 'text-red-400' :
+                  monthlyStats.trendPct < -5 ? 'text-green-400' : 'text-gray-400',
                 )}>
-                  {stats.mtdPct > 5  ? <TrendingUp size={11} />  :
-                   stats.mtdPct < -5 ? <TrendingDown size={11} /> : <Minus size={11} />}
-                  {stats.mtdPct > 0 ? '+' : ''}{stats.mtdPct.toFixed(1)}%
+                  {monthlyStats.trendPct > 5  ? <TrendingUp size={11} />  :
+                   monthlyStats.trendPct < -5 ? <TrendingDown size={11} /> : <Minus size={11} />}
+                  {monthlyStats.trendPct > 0 ? '+' : ''}{monthlyStats.trendPct.toFixed(1)}%
                 </span>
               </div>
-              <div className="w-px bg-gray-800" />
+            </>
+          ) : (
+            <>
+              {!noCurrData && (
+                <>
+                  <div className="flex flex-col items-end">
+                    <span className="text-gray-600">{currMonth} MTD</span>
+                    <span className="font-bold text-white tabular-nums">{fmtShort(stats.mtdTotal)}</span>
+                  </div>
+                  <div className="w-px bg-gray-800" />
+                </>
+              )}
               <div className="flex flex-col items-end">
-                <span className="text-gray-600">Projected full month</span>
-                <span className="font-bold text-white tabular-nums">{fmtShort(stats.projected)}</span>
+                <span className="text-gray-600">{prevMonth} total</span>
+                <span className="font-bold text-white tabular-nums">{fmtShort(stats.prevTotal)}</span>
               </div>
+              {!noCurrData && (
+                <>
+                  <div className="w-px bg-gray-800" />
+                  <div className="flex flex-col items-end">
+                    <span className="text-gray-600">MTD vs same period</span>
+                    <span className={clsx(
+                      'font-bold tabular-nums flex items-center gap-1',
+                      stats.mtdPct > 5  ? 'text-red-400' :
+                      stats.mtdPct < -5 ? 'text-green-400' : 'text-gray-400',
+                    )}>
+                      {stats.mtdPct > 5  ? <TrendingUp size={11} />  :
+                       stats.mtdPct < -5 ? <TrendingDown size={11} /> : <Minus size={11} />}
+                      {stats.mtdPct > 0 ? '+' : ''}{stats.mtdPct.toFixed(1)}%
+                    </span>
+                  </div>
+                  <div className="w-px bg-gray-800" />
+                  <div className="flex flex-col items-end">
+                    <span className="text-gray-600">Projected full month</span>
+                    <span className="font-bold text-white tabular-nums">{fmtShort(stats.projected)}</span>
+                  </div>
+                </>
+              )}
             </>
           )}
         </div>
       </div>
 
-      <div className="flex gap-6">
-        <div className="flex-1 min-w-0" style={{ height: 200 }}>
+      {view === '6m' && monthlyChartData.length > 0 ? (
+        <div style={{ height: 200 }}>
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
+            <BarChart data={monthlyChartData} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" vertical={false} />
-              <XAxis
-                dataKey="day"
-                tick={{ fill: '#6b7280', fontSize: 10 }}
-                axisLine={false}
-                tickLine={false}
-                tickFormatter={v => `${v}`}
-                interval={4}
-              />
-              <YAxis
-                tickFormatter={v => fmtShort(v)}
-                tick={{ fill: '#6b7280', fontSize: 10 }}
-                axisLine={false}
-                tickLine={false}
-                width={48}
-              />
-              <Tooltip
-                content={<ChartTooltip currMonth={currMonth} prevMonth={prevMonth} />}
-                cursor={{ stroke: '#374151', strokeWidth: 1 }}
-              />
-              {avgLine > 0 && (
-                <ReferenceLine
-                  y={avgLine}
-                  stroke="#4b5563"
-                  strokeDasharray="4 3"
-                  label={{
-                    value: `Avg ${fmtShort(avgLine)}`,
-                    fill: '#6b7280',
-                    fontSize: 10,
-                    position: 'insideTopRight',
-                  }}
-                />
-              )}
-              {/* Previous month — gray dashed, full month shape */}
-              <Line
-                type="monotone"
-                dataKey="prev"
-                stroke="#4b5563"
-                strokeWidth={1.5}
-                strokeDasharray="5 3"
-                dot={false}
-                activeDot={{ r: 3, fill: '#6b7280', strokeWidth: 0 }}
-                connectNulls={false}
-              />
-              {/* Current month — solid blue, stops at today */}
-              <Line
-                type="monotone"
-                dataKey="curr"
-                stroke="#3b82f6"
-                strokeWidth={2}
-                dot={false}
-                activeDot={{ r: 4, fill: '#3b82f6', strokeWidth: 0 }}
-                connectNulls={false}
-              />
-            </LineChart>
+              <XAxis dataKey="label" tick={{ fill: '#6b7280', fontSize: 10 }} axisLine={false} tickLine={false} />
+              <YAxis tickFormatter={v => fmtShort(v)} tick={{ fill: '#6b7280', fontSize: 10 }} axisLine={false} tickLine={false} width={48} />
+              <Tooltip content={<MonthlyTooltip />} cursor={{ fill: '#1f2937', opacity: 0.6 }} />
+              <Bar dataKey="value" radius={[3, 3, 0, 0]} maxBarSize={48}>
+                {monthlyChartData.map((entry, i) => (
+                  <Cell
+                    key={entry.label}
+                    fill={i === monthlyChartData.length - 1 ? '#f59e0b' : '#3b82f6'}
+                    fillOpacity={i === monthlyChartData.length - 1 ? 0.8 : 0.6 + (i / monthlyChartData.length) * 0.35}
+                  />
+                ))}
+              </Bar>
+            </BarChart>
           </ResponsiveContainer>
         </div>
-
-        <div className="w-56 shrink-0 border-l border-gray-800/60 pl-5">
-          {/* Legend */}
-          <div className="flex gap-4 mb-4 text-xs">
-            {!noCurrData && (
-              <span className="flex items-center gap-1.5 text-blue-400">
-                <span className="inline-block w-5 h-0.5 bg-blue-400 rounded" />
-                {currMonth}
-              </span>
-            )}
-            <span className="flex items-center gap-1.5 text-gray-500">
-              <span className="inline-block w-5 border-t border-dashed border-gray-500" />
-              {prevMonth}
-            </span>
+      ) : (
+        <div className="flex gap-6">
+          <div className="flex-1 min-w-0" style={{ height: 200 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" vertical={false} />
+                <XAxis
+                  dataKey="day"
+                  tick={{ fill: '#6b7280', fontSize: 10 }}
+                  axisLine={false}
+                  tickLine={false}
+                  tickFormatter={v => `${v}`}
+                  interval={4}
+                />
+                <YAxis
+                  tickFormatter={v => fmtShort(v)}
+                  tick={{ fill: '#6b7280', fontSize: 10 }}
+                  axisLine={false}
+                  tickLine={false}
+                  width={48}
+                />
+                <Tooltip
+                  content={<ChartTooltip currMonth={currMonth} prevMonth={prevMonth} />}
+                  cursor={{ stroke: '#374151', strokeWidth: 1 }}
+                />
+                {avgLine > 0 && (
+                  <ReferenceLine
+                    y={avgLine}
+                    stroke="#4b5563"
+                    strokeDasharray="4 3"
+                    label={{
+                      value: `Avg ${fmtShort(avgLine)}`,
+                      fill: '#6b7280',
+                      fontSize: 10,
+                      position: 'insideTopRight',
+                    }}
+                  />
+                )}
+                <Line type="monotone" dataKey="prev" stroke="#4b5563" strokeWidth={1.5} strokeDasharray="5 3" dot={false} activeDot={{ r: 3, fill: '#6b7280', strokeWidth: 0 }} connectNulls={false} />
+                <Line type="monotone" dataKey="curr" stroke="#3b82f6" strokeWidth={2} dot={false} activeDot={{ r: 4, fill: '#3b82f6', strokeWidth: 0 }} connectNulls={false} />
+              </LineChart>
+            </ResponsiveContainer>
           </div>
-          <TopMovers resources={resources} />
+
+          <div className="w-56 shrink-0 border-l border-gray-800/60 pl-5">
+            <div className="flex gap-4 mb-4 text-xs">
+              {!noCurrData && (
+                <span className="flex items-center gap-1.5 text-blue-400">
+                  <span className="inline-block w-5 h-0.5 bg-blue-400 rounded" />
+                  {currMonth}
+                </span>
+              )}
+              <span className="flex items-center gap-1.5 text-gray-500">
+                <span className="inline-block w-5 border-t border-dashed border-gray-500" />
+                {prevMonth}
+              </span>
+            </div>
+            <TopMovers resources={resources} />
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }
