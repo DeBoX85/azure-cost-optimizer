@@ -56,10 +56,11 @@ Enterprise Azure cost tools are expensive and require you to hand your billing d
 - 🌳 **Root Management Group support** — browse your full MG hierarchy and scan all subscriptions beneath any group in one pass
 - 🤖 **AI-assisted scoring** — connect Azure OpenAI to get plain-English explanations and catch false positives
 - 🧹 **Orphan detection** — unattached disks, unused public IPs, deallocated VMs, empty App Service Plans
-- 📈 **3 months of billing history** — sustained cost trends flagged before they become a problem
+- 📈 **6-month spend history** — full subscription-level cost trend across 6 months including deleted resources, visualised as a bar chart in the dashboard and PDF
 - 📊 **Industry benchmarking** — see how your waste rate, resource health, and tag compliance compare to similar environments
-- 🌍 **Carbon footprint tracking** — CO₂ estimates with tree and flight equivalents
-- 📄 **PDF export** — shareable reports for stakeholder and board reviews
+- 🌍 **Carbon footprint tracking** — CO₂ estimates with on-premises comparison and tree/flight equivalents
+- 📄 **PDF export** — shareable reports with action statuses, spend trends, and carbon comparison for stakeholder and board reviews
+- 🎨 **Custom branding** — add your company logo to PDF reports by dropping a `logo.png` into the `backend/` folder
 - 🔒 **No telemetry** — read-only roles, no write access, no data sent anywhere. AI features are optional; when enabled, resource metadata is sent to your Azure OpenAI instance
 
 ---
@@ -192,6 +193,30 @@ Each resource receives a 0-100 optimisation score based on real Azure Monitor me
 | N/A | **Unknown** | No metrics available (diagnostics not enabled) |
 
 Resources with locks, backups, private endpoints, or active reservations are flagged as protected and excluded from waste recommendations regardless of score.
+
+---
+
+## Custom branding
+
+Add your company or team logo to every PDF export in two ways:
+
+**Option A — file drop (recommended for self-hosted deployments):**
+
+Place any PNG, JPG, or SVG file named `logo.png` in the `backend/` folder:
+
+```
+azure-cost-optimizer/
+└── backend/
+    └── logo.png   ← your logo here
+```
+
+Restart the backend and the logo appears on the PDF cover page automatically. The file is gitignored and never committed.
+
+**Option B — Settings UI:**
+
+Open the app → Settings → **Branding** tab → Upload logo. No restart needed.
+
+If no logo is set the report uses the default Azure Cost Optimizer icon.
 
 ---
 
