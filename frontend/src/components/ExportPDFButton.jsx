@@ -242,7 +242,7 @@ function PageFooter({ subscriptionId }) {
 
 // ── Cover page ─────────────────────────────────────────────────────────────────
 
-function CoverPage({ kpi, subscriptionId, subscriptionName, generatedAt, logoDataUrl }) {
+function CoverPage({ kpi, subscriptionId, subscriptionName, generatedAt, logoDataUrl, companyName = '' }) {
   const momSign = kpi.mom_cost_delta >= 0 ? '+' : ''
   return (
     <Page size="A4" style={s.page}>
@@ -269,7 +269,14 @@ function CoverPage({ kpi, subscriptionId, subscriptionName, generatedAt, logoDat
 
         {/* Title block */}
         <View style={s.coverCenter}>
-          <Text style={s.coverTitle}>Cost Optimization{'\n'}Report</Text>
+          {companyName ? (
+            <View style={{ marginBottom: 10 }}>
+              <Text style={{ fontSize: 11, fontFamily: 'Helvetica-Bold', color: C.accent, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 8 }}>{companyName}</Text>
+              <Text style={{ fontSize: 36, fontFamily: 'Helvetica-Bold', color: C.text, letterSpacing: -0.5 }}>FinOps Report</Text>
+            </View>
+          ) : (
+            <Text style={s.coverTitle}>{`Cost Optimization\nReport`}</Text>
+          )}
           <Text style={s.coverSubtitle}>Infrastructure analysis and savings opportunities</Text>
 
           {/* Meta card */}
@@ -1683,7 +1690,7 @@ function AICostPage({ resources, kpi, subscriptionId }) {
 
 // ── PDF Document ───────────────────────────────────────────────────────────────
 
-function ReportDocument({ data, notes = {}, rgDescriptions = {}, actionStatuses = {}, logoDataUrl = null }) {
+function ReportDocument({ data, notes = {}, rgDescriptions = {}, actionStatuses = {}, logoDataUrl = null, companyName = '' }) {
   const isAllSubs   = !data.active_subscription_id
   const activeSub   = isAllSubs
     ? null
@@ -1692,14 +1699,15 @@ function ReportDocument({ data, notes = {}, rgDescriptions = {}, actionStatuses 
   const subName     = activeSub?.subscription_name || ''
   const subLabel    = isAllSubs ? 'All Subscriptions' : (subName || (subId ? `${subId.slice(0, 8)}…` : 'All Subscriptions'))
   const generatedAt = date()
+  const docTitle    = companyName ? `${companyName} FinOps Report` : 'Azure Cost Optimization Report'
 
   return (
     <Document
-      title="Azure Cost Optimization Report"
+      title={docTitle}
       author="Azure Cost Optimizer"
       subject={`Cost analysis for ${subName || subId || 'all subscriptions'}`}
     >
-      <CoverPage        kpi={data.kpi} subscriptionId={subId} subscriptionName={subName} generatedAt={generatedAt} logoDataUrl={logoDataUrl} />
+      <CoverPage        kpi={data.kpi} subscriptionId={subId} subscriptionName={subName} generatedAt={generatedAt} logoDataUrl={logoDataUrl} companyName={companyName} />
       {isAllSubs && (data.subscriptions?.length ?? 0) > 1 && (
         <SubscriptionBreakdownPage subscriptions={data.subscriptions} subscriptionId={subLabel} />
       )}
@@ -1740,15 +1748,17 @@ export default function ExportPDFButton({ data }) {
       const rawStatuses = await api.getActionStatuses().catch(() => ({}))
       const actionStatuses = Object.fromEntries(Object.entries(rawStatuses).map(([k, v]) => [k.toLowerCase(), v]))
       const { data_url: logoDataUrl } = await api.getLogo().catch(() => ({}))
-      const blob     = await pdf(<ReportDocument data={data} notes={notes} rgDescriptions={rgDescriptions} actionStatuses={actionStatuses} logoDataUrl={logoDataUrl || null} />).toBlob()
+      const { company_name: companyName = '' } = await api.getCompanyName().catch(() => ({}))
+      const blob     = await pdf(<ReportDocument data={data} notes={notes} rgDescriptions={rgDescriptions} actionStatuses={actionStatuses} logoDataUrl={logoDataUrl || null} companyName={companyName} />).toBlob()
       const url      = URL.createObjectURL(blob)
       const a        = document.createElement('a')
       const isAllSubs = !data.active_subscription_id
       const subId     = data.active_subscription_id || 'all'
+      const nameSlug  = companyName ? companyName.toLowerCase().replace(/\s+/g, '-') + '-' : ''
       a.href          = url
       a.download      = isAllSubs
-        ? `azure-cost-report-all-subscriptions-${new Date().toISOString().slice(0, 10)}.pdf`
-        : `azure-cost-report-${subId.slice(0, 8)}-${new Date().toISOString().slice(0, 10)}.pdf`
+        ? `${nameSlug}finops-report-all-subscriptions-${new Date().toISOString().slice(0, 10)}.pdf`
+        : `${nameSlug}finops-report-${subId.slice(0, 8)}-${new Date().toISOString().slice(0, 10)}.pdf`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)

@@ -49,6 +49,10 @@ export const api = {
   saveLogo:   (dataUrl)   => request('/logo', { method: 'POST', body: JSON.stringify({ data_url: dataUrl }) }),
   deleteLogo: ()          => request('/logo', { method: 'DELETE' }),
 
+  // Company name branding
+  getCompanyName:  ()     => request('/company-name'),
+  saveCompanyName: (name) => request('/company-name', { method: 'POST', body: JSON.stringify({ company_name: name }) }),
+
   // SSE streaming dashboard — accepts optional URLSearchParams
   streamDashboard(onEvent, onDone, onError, params = null) {
     const qs  = params && params.toString() ? `?${params.toString()}` : ''

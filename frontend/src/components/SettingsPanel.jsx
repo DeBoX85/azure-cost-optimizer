@@ -73,13 +73,16 @@ const PROVIDER_OPTIONS = [
 ]
 
 function BrandingTab() {
-  const [logoUrl, setLogoUrl]       = useState(null)
-  const [uploading, setUploading]   = useState(false)
-  const [msg, setMsg]               = useState(null)
-  const fileRef                     = useRef()
+  const [logoUrl, setLogoUrl]           = useState(null)
+  const [uploading, setUploading]       = useState(false)
+  const [msg, setMsg]                   = useState(null)
+  const [companyName, setCompanyName]   = useState('')
+  const [savingName, setSavingName]     = useState(false)
+  const fileRef                         = useRef()
 
   useEffect(() => {
     api.getLogo().then(r => setLogoUrl(r.data_url || null)).catch(() => {})
+    api.getCompanyName().then(r => setCompanyName(r.company_name || '')).catch(() => {})
   }, [])
 
   function handleFile(e) {
@@ -111,6 +114,16 @@ function BrandingTab() {
       setMsg({ type: 'success', msg: 'Logo removed. PDFs will show the default tool icon.' })
     } catch { setMsg({ type: 'error', msg: 'Remove failed.' }) }
     finally { setUploading(false) }
+  }
+
+  async function handleSaveCompanyName() {
+    setSavingName(true)
+    setMsg(null)
+    try {
+      await api.saveCompanyName(companyName)
+      setMsg({ type: 'success', msg: companyName ? `Company name saved. PDFs will be titled "${companyName} FinOps Report".` : 'Company name cleared.' })
+    } catch { setMsg({ type: 'error', msg: 'Save failed.' }) }
+    finally { setSavingName(false) }
   }
 
   return (
@@ -155,6 +168,29 @@ function BrandingTab() {
           {uploading ? <Loader size={14} className="animate-spin" /> : <Upload size={14} />}
           {logoUrl ? 'Replace logo' : 'Upload logo'}
         </button>
+      </div>
+
+      <div className="rounded-lg border border-gray-700/60 bg-gray-800/30 p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <Info size={13} className="text-blue-400 shrink-0" />
+          <p className="text-xs font-semibold text-gray-300">Company name</p>
+        </div>
+        <p className="text-xs text-gray-400 leading-relaxed">
+          Appears as the PDF report title — e.g. <span className="text-gray-200 font-medium">Acme Corp FinOps Report</span>. Leave blank to use the default title.
+        </p>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={companyName}
+            onChange={e => setCompanyName(e.target.value)}
+            placeholder="e.g. Acme Corp"
+            className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-blue-600"
+          />
+          <button onClick={handleSaveCompanyName} disabled={savingName}
+            className="btn-primary text-sm disabled:opacity-40 whitespace-nowrap">
+            {savingName ? <Loader size={14} className="animate-spin" /> : 'Save'}
+          </button>
+        </div>
       </div>
 
       {msg && <StatusMessage {...msg} />}

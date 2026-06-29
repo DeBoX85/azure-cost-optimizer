@@ -1992,6 +1992,26 @@ async def delete_logo():
     return {"ok": True}
 
 
+# ── Company name branding ───────────────────────────────────────────────────────
+
+_COMPANY_NAME_FILE = pathlib.Path(__file__).parent / "company_name.txt"
+
+@app.get("/api/company-name")
+async def get_company_name():
+    if _COMPANY_NAME_FILE.exists():
+        return {"company_name": _COMPANY_NAME_FILE.read_text(encoding="utf-8").strip()}
+    return {"company_name": ""}
+
+@app.post("/api/company-name")
+async def save_company_name(body: dict):
+    name = (body.get("company_name") or "").strip()
+    if name:
+        _COMPANY_NAME_FILE.write_text(name, encoding="utf-8")
+    else:
+        _COMPANY_NAME_FILE.unlink(missing_ok=True)
+    return {"ok": True}
+
+
 # ── Serve built React frontend ─────────────────────────────────────────────────
 # Only active when frontend/dist exists (i.e. after npm run build).
 # In dev mode the Vite dev server runs separately on port 5173.
