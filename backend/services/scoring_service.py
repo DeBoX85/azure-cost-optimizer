@@ -49,6 +49,9 @@ INFRASTRUCTURE_TYPE_PREFIXES = (
     # not inactive. Treat as infrastructure so they never score as "Likely Waste".
     "microsoft.recoveryservices/vaults",
     "microsoft.dataprotection/backupvaults",
+    # Power Platform billing accounts (Copilot credits) — cost reflects credit consumption
+    # by assigned users. No Azure Monitor utilisation metrics exist; spend IS the signal.
+    "microsoft.powerplatform",
 )
 
 INFRASTRUCTURE_BASE_SCORE = 60.0   # "Actively Used" tier — present and serving a purpose

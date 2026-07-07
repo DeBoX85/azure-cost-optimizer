@@ -12,6 +12,7 @@ backend/settings.json
 backend/notes.json
 backend/rg_descriptions.json
 backend/action_statuses.json
+backend/company_name.txt
 # User-supplied report logo — place logo.png/jpg/svg here to brand PDF exports
 backend/logo.png
 backend/logo.jpg

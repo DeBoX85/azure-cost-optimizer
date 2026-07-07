@@ -1688,6 +1688,143 @@ function AICostPage({ resources, kpi, subscriptionId }) {
   )
 }
 
+// ── Copilot / Power Platform Cost ─────────────────────────────────────────────
+
+function isCopilotResource(r) {
+  const t  = (r.resource_type  || '').toLowerCase()
+  const rg = (r.resource_group || '').toLowerCase()
+  return t.startsWith('microsoft.powerplatform') || rg.includes('copilot-credits')
+}
+
+function CopilotCostPage({ resources, kpi, subscriptionId }) {
+  const copilot = (resources || [])
+    .filter(isCopilotResource)
+    .sort((a, b) => (b.cost_current_month || 0) - (a.cost_current_month || 0))
+
+  if (!copilot.length) return null
+
+  const totalCurrent  = copilot.reduce((s, r) => s + (r.cost_current_month  || 0), 0)
+  const totalPrevious = copilot.reduce((s, r) => s + (r.cost_previous_month || 0), 0)
+  const momDelta      = totalPrevious > 0 ? ((totalCurrent - totalPrevious) / totalPrevious) * 100 : null
+  const now           = new Date()
+  const daysElapsed   = now.getDate()
+  const daysInMonth   = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+  const dailyRate     = daysElapsed > 0 ? totalCurrent / daysElapsed : 0
+  const projected     = dailyRate * daysInMonth
+  const copilotPct    = (kpi?.total_cost_current_month || 0) > 0
+    ? ((totalCurrent / kpi.total_cost_current_month) * 100).toFixed(1)
+    : '0'
+  const trendColor    = momDelta == null ? C.textMuted : momDelta > 5 ? C.danger : momDelta < -5 ? C.success : C.textMuted
+
+  const kpis = [
+    { label: 'Copilot Spend (MTD)', value: fmt(totalCurrent, 2), sub: `Day ${daysElapsed} of ${daysInMonth}`,   color: '#7c3aed' },
+    { label: 'Last Month',          value: fmt(totalPrevious, 2), sub: 'Full calendar month',                    color: '#6d28d9' },
+    { label: 'Projected EOM',       value: fmt(projected, 0),     sub: `$${dailyRate.toFixed(2)}/day rate`,     color: '#8b5cf6' },
+    { label: '% of Azure Bill',     value: `${copilotPct}%`,      sub: 'Copilot share of total spend',          color: C.accent  },
+    { label: 'Annual Forecast',     value: fmt(projected * 12, 0),sub: 'At current monthly rate',               color: projected * 12 > 5000 ? C.warn : C.success },
+    { label: 'Billing Policies',    value: String(copilot.length),sub: 'Power Platform account resources',      color: C.textMuted },
+  ]
+
+  return (
+    <Page size="A4" style={s.page}>
+      <View style={s.inner}>
+        <View style={s.sectionHeader}>
+          <Text style={s.sectionTitle}>Microsoft Copilot Credits</Text>
+          <View style={{ ...s.sectionBadge, backgroundColor: '#ede9fe' }}>
+            <Text style={{ ...s.sectionBadgeText, color: '#5b21b6' }}>{copilot.length} POLIC{copilot.length === 1 ? 'Y' : 'IES'}</Text>
+          </View>
+        </View>
+
+        {/* Context note */}
+        <View style={{ ...s.narrativeBox, borderLeftColor: '#7c3aed', marginBottom: 16 }}>
+          <Text style={{ fontSize: 8.5, color: C.textMuted, lineHeight: 1.6 }}>
+            Microsoft 365 Copilot and Copilot Studio credits are billed directly to Azure under{' '}
+            <Text style={{ fontFamily: 'Helvetica-Bold', color: '#7c3aed' }}>microsoft.powerplatform/accounts</Text> resources.
+            Each billing policy (e.g. "all users policy") tracks credit consumption by the users assigned to it.
+            Per-user detail is only available in the Microsoft 365 admin centre — not exposed via Azure Cost Management.
+          </Text>
+        </View>
+
+        {/* KPI grid */}
+        <View style={s.kpiGrid}>
+          {kpis.map((k, i) => (
+            <View key={i} style={{ ...s.kpiCard, borderTopColor: k.color }}>
+              <Text style={s.kpiLabel}>{k.label}</Text>
+              <Text style={{ ...s.kpiValue, fontSize: 18, color: C.text }}>{k.value}</Text>
+              <Text style={s.kpiSub}>{k.sub}</Text>
+            </View>
+          ))}
+        </View>
+
+        {/* MoM trend callout */}
+        {momDelta !== null && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: C.bgCard, borderRadius: 6, padding: 10, marginBottom: 16, gap: 8, borderLeft: `3px solid ${trendColor}` }}>
+            <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Bold', color: trendColor }}>
+              {momDelta >= 0 ? '▲' : '▼'} {Math.abs(momDelta).toFixed(1)}% month-over-month
+            </Text>
+            <Text style={{ fontSize: 8.5, color: C.textMuted, flex: 1 }}>
+              {momDelta > 5
+                ? 'Copilot usage is growing. Review user assignments to ensure the policy scope matches your intended rollout.'
+                : momDelta < -5
+                ? 'Copilot usage has declined vs last month. This may reflect seasonal patterns or a reduction in active users.'
+                : 'Copilot spend is stable month-over-month.'}
+            </Text>
+          </View>
+        )}
+
+        {/* Policy table */}
+        <View style={s.table}>
+          <View style={s.tableHead}>
+            <Text style={{ ...s.tableHeadCell, flex: 2.5 }}>Policy Name</Text>
+            <Text style={{ ...s.tableHeadCell, flex: 1.8 }}>Resource Group</Text>
+            <Text style={{ ...s.tableHeadCell, flex: 1 }}>MTD Cost</Text>
+            <Text style={{ ...s.tableHeadCell, flex: 1 }}>Last Month</Text>
+            <Text style={{ ...s.tableHeadCell, flex: 0.9 }}>MoM Δ</Text>
+          </View>
+          {copilot.map((r, i) => {
+            const delta = r.cost_previous_month > 0
+              ? ((r.cost_current_month - r.cost_previous_month) / r.cost_previous_month) * 100
+              : null
+            const dColor = delta == null ? C.textDim : delta > 5 ? C.danger : delta < -5 ? C.success : C.textMuted
+            return (
+              <View key={i} style={[s.tableRow, i % 2 === 1 ? s.tableRowAlt : {}]}>
+                <View style={{ flex: 2.5 }}>
+                  <Text style={s.tableCell}>{r.resource_name}</Text>
+                  <Text style={{ ...s.tableCellMuted, fontSize: 7 }}>microsoft.powerplatform/accounts</Text>
+                </View>
+                <Text style={{ ...s.tableCellMuted, flex: 1.8 }}>{r.resource_group}</Text>
+                <Text style={{ ...s.tableCell, flex: 1, fontFamily: 'Helvetica-Bold' }}>{fmt(r.cost_current_month, 2)}</Text>
+                <Text style={{ ...s.tableCellMuted, flex: 1 }}>{fmt(r.cost_previous_month, 2)}</Text>
+                <Text style={{ ...s.tableCell, flex: 0.9, color: dColor }}>
+                  {delta == null ? '—' : `${delta >= 0 ? '+' : ''}${delta.toFixed(1)}%`}
+                </Text>
+              </View>
+            )
+          })}
+          {/* Totals row */}
+          {copilot.length > 1 && (
+            <View style={{ ...s.tableRow, backgroundColor: C.bgLight }}>
+              <Text style={{ ...s.tableCell, flex: 2.5, fontFamily: 'Helvetica-Bold' }}>Total</Text>
+              <Text style={{ ...s.tableCellMuted, flex: 1.8 }} />
+              <Text style={{ ...s.tableCell, flex: 1, fontFamily: 'Helvetica-Bold', color: '#7c3aed' }}>{fmt(totalCurrent, 2)}</Text>
+              <Text style={{ ...s.tableCell, flex: 1, color: C.textMuted }}>{fmt(totalPrevious, 2)}</Text>
+              <Text style={{ ...s.tableCell, flex: 0.9, color: trendColor }}>
+                {momDelta != null ? `${momDelta >= 0 ? '+' : ''}${momDelta.toFixed(1)}%` : '—'}
+              </Text>
+            </View>
+          )}
+        </View>
+
+        {/* Footer note */}
+        <Text style={{ fontSize: 7.5, color: C.textDim, marginTop: 8, lineHeight: 1.5 }}>
+          To review per-user consumption detail or adjust policy scope, visit the Microsoft 365 admin centre (admin.microsoft.com) or the Power Platform admin centre (admin.powerplatform.microsoft.com).
+        </Text>
+      </View>
+      <PageFooter subscriptionId={subscriptionId} />
+    </Page>
+  )
+}
+
 // ── PDF Document ───────────────────────────────────────────────────────────────
 
 function ReportDocument({ data, notes = {}, rgDescriptions = {}, actionStatuses = {}, logoDataUrl = null, companyName = '' }) {
@@ -1716,6 +1853,7 @@ function ReportDocument({ data, notes = {}, rgDescriptions = {}, actionStatuses 
       {data.ai_narrative && <NarrativePage narrative={data.ai_narrative} subscriptionId={subLabel} />}
       <ChartsPage       scoreDistribution={data.score_distribution} resourceTypes={data.resource_type_summary} kpi={data.kpi} subscriptionId={subLabel} />
       <AICostPage       resources={data.resources} kpi={data.kpi} subscriptionId={subLabel} />
+      <CopilotCostPage  resources={data.resources} kpi={data.kpi} subscriptionId={subLabel} />
       <ActionPlanPage   savings={data.savings_recommendations} resources={data.resources} notes={notes} actionStatuses={actionStatuses} subscriptionId={subLabel} />
       <SavingsPage      savings={data.savings_recommendations} resources={data.resources} subscriptionId={subLabel} />
       <RGSummaryPage    resources={data.resources} kpi={data.kpi} rgDescriptions={rgDescriptions} subscriptionId={subLabel} />

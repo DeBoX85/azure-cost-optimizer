@@ -129,6 +129,7 @@ RESOURCE_TYPE_DISPLAY: dict[str, str] = {
     "microsoft.network/networkinterfaces":            "Network Interfaces",
     "microsoft.operationalinsights/workspaces":       "Log Analytics",
     "microsoft.signalrservice/signalr":               "SignalR",
+    "microsoft.powerplatform/accounts":               "Copilot Credits",
 }
 
 
@@ -159,6 +160,8 @@ RESOURCE_CATEGORIES: dict[str, str] = {
     "microsoft.machinelearningservices/workspaces":"ai",
     "microsoft.search/searchservices":             "ai",
     "microsoft.openai":                            "ai",
+    # Copilot / Power Platform
+    "microsoft.powerplatform":                     "copilot",
     # Networking infrastructure
     "microsoft.network/virtualnetworks":           "infrastructure",
     "microsoft.network/networksecuritygroups":     "infrastructure",

@@ -44,6 +44,7 @@ import AppServicePanel   from './components/AppServicePanel'
 import StoragePanel      from './components/StoragePanel'
 import SpendTrend        from './components/SpendTrend'
 import ReservationsPanel from './components/ReservationsPanel'
+import CopilotPanel     from './components/CopilotPanel'
 import ExportPDFButton   from './components/ExportPDFButton'
 
 function ErrorView({ message, onRetry }) {
@@ -589,9 +590,12 @@ function AppInner() {
           />
         )}
 
-        {/* ── AI Costs view ── */}
+        {/* ── AI Costs view (includes Copilot section below) ── */}
         {view === 'ai' && (
-          <AIResourcesPanel resources={data?.resources ?? []} onResourceClick={handleResourceDetailClick} />
+          <div className="space-y-6">
+            <AIResourcesPanel resources={data?.resources ?? []} onResourceClick={handleResourceDetailClick} />
+            <CopilotPanel     resources={data?.resources ?? []} onResourceClick={handleResourceDetailClick} />
+          </div>
         )}
 
         {/* ── Dashboard view ── */}
