@@ -49,8 +49,8 @@ Screenshot*.png
 # But allow docs/screenshots/ for README assets
 !docs/screenshots/*.png
 
-# Company-specific logo (never commit — use Settings > Branding to upload your own)
-frontend/src/assets/impax-logo.png
+# Custom logos (never commit — use Settings > Branding to upload your own)
+frontend/src/assets/*-logo.*
 
 # Internal development notes (backlog, session history)
 IMPROVEMENTS.md
